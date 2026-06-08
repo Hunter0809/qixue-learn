@@ -38,6 +38,7 @@ export type ProfileResponse = {
 };
 
 export type PlanRequest = {
+  owner?: string;
   subject: string;
   goal: string;
   dailyMinutes: number;
@@ -67,7 +68,7 @@ export type QuizQuestion = {
   knowledge: string;
   difficulty: "easy" | "medium" | "hard";
   stem: string;
-  options?: string[];
+  options?: string[] | null;
 };
 
 export type QuizResponse = {
@@ -96,6 +97,7 @@ export type QuizSubmitResponse = {
 };
 
 export type ResourceRequest = {
+  owner?: string;
   knowledge: string;
   type: Resource["type"];
   style: "plain" | "exam" | "practice";
@@ -141,6 +143,7 @@ export type HomeworkFeature =
   | "parent_report";
 
 export type HomeworkRequest = {
+  owner?: string;
   feature: HomeworkFeature;
   subject: string;
   content: string;

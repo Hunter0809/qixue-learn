@@ -2,6 +2,7 @@
 
 import { ExternalLink, Video } from "lucide-react";
 import { trackLearningBehavior } from "@/lib/behavior-tracking";
+import { getLearnerProfile, loadCurrentUsername } from "@/lib/profile-storage";
 
 export type VideoResource = {
   id: string;
@@ -17,11 +18,21 @@ export type VideoResource = {
 
 export function LearningVideoCard({ video }: { video: VideoResource }) {
   function trackClick() {
-    trackLearningBehavior({
-      knowledge: video.knowledge || video.title,
-      subject: video.subject || video.level || "综合",
-      source: "video_click"
-    });
+    const subject = video.subject || video.level || "综合";
+    const knowledge = video.knowledge || video.title;
+    trackLearningBehavior({ knowledge, subject, source: "video_click" });
+    void fetch("/api/behavior", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        owner: loadCurrentUsername() || undefined,
+        subject,
+        knowledge,
+        source: "video_click",
+        correct: true,
+        profile: getLearnerProfile()
+      })
+    }).catch(() => undefined);
   }
 
   return (

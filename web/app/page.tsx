@@ -137,7 +137,8 @@ function ReviewPlanSection({ weakPoints }: { weakPoints: WeakPoint[] }) {
 
 
 
-const VIDEOS_PER_PAGE = 6;
+const INITIAL_VISIBLE_VIDEOS = 50;
+const LOAD_MORE_VIDEOS = 10;
 const VIDEO_TARGET_PER_STAGE = 1000;
 
 const IRRELEVANT_KEYWORDS = /游戏|手游|端游|LOL|王者荣耀|原神|英雄联盟|崩坏|三国杀|吃鸡|永劫|绝地求生|和平精英|第五人格|明日方舟|阴阳师|崩坏星穹|我的世界|迷你世界|摩尔庄园|蛋仔派对|暗区突围|鬼畚|搞笑|娱乐|整活/i;
@@ -209,6 +210,14 @@ function isVideoSubjectRelevant(title: string, description: string, subject: str
   return subjectCount > otherCount;
 }
 
+function importanceStars(weight: number) {
+  if (weight >= 85) return 5;
+  if (weight >= 65) return 4;
+  if (weight >= 45) return 3;
+  if (weight >= 25) return 2;
+  return 1;
+}
+
 
 
 function LearningSpaceSection() {
@@ -218,6 +227,8 @@ function LearningSpaceSection() {
   var loading = _loading[0], setLoading = _loading[1];
   var _page = useState(0);
   var page = _page[0], setPage = _page[1];
+  var _visibleVideoCount = useState(INITIAL_VISIBLE_VIDEOS);
+  var visibleVideoCount = _visibleVideoCount[0], setVisibleVideoCount = _visibleVideoCount[1];
   var _layout = useState("grid");
   var layout = _layout[0], setLayout = _layout[1];
   var _kw = useState("");
@@ -331,6 +342,7 @@ function LearningSpaceSection() {
   function handleSubjectChange(subject: string) {
     setActiveSubject(subject);
     setPage(0);
+    setVisibleVideoCount(INITIAL_VISIBLE_VIDEOS);
     setSearchResults([]);
     setSearchKeyword(stage + " 学习视频");
     if (subject === "全部") {
@@ -349,6 +361,7 @@ function LearningSpaceSection() {
       var results = await fetchSubjectVideos(searchKeywordText, 20, { v: false }, true);
       setSearchResults(results);
       setPage(0);
+      setVisibleVideoCount(INITIAL_VISIBLE_VIDEOS);
       setSearchKeyword((subjectPrefix ? subjectPrefix + " " : "") + videoQuery.trim() + " 全网结果");
     } finally {
       setBroadSearching(false);
@@ -367,8 +380,29 @@ function LearningSpaceSection() {
       .toLowerCase()
       .includes(query);
   });
-  var totalPages = Math.ceil(filteredVideos.length / VIDEOS_PER_PAGE);
-  var paged = filteredVideos.slice(page * VIDEOS_PER_PAGE, (page + 1) * VIDEOS_PER_PAGE);
+  var visibleVideos = filteredVideos.slice(0, visibleVideoCount);
+
+  async function loadMoreVisibleVideos() {
+    var nextCount = visibleVideoCount + LOAD_MORE_VIDEOS;
+    setVisibleVideoCount(nextCount);
+    if (filteredVideos.length >= nextCount) return;
+    var targetSubject = activeSubject === "全部" ? (stageSubjectMap[stage] || stageSubjectMap["高中"])[0] : activeSubject;
+    var more = await fetchSubjectVideos(targetSubject, Math.ceil(nextCount / 50) + 1, { v: false }, true);
+    setAllFetched(function(prev) {
+      var merged = prev.slice();
+      more.forEach(function(video) {
+        if (!merged.some(function(item) { return item.id === video.id || item.url === video.url; })) merged.push(video);
+      });
+      return merged;
+    });
+    setVideos(function(prev) {
+      var merged = prev.slice();
+      more.forEach(function(video) {
+        if (!merged.some(function(item) { return item.id === video.id || item.url === video.url; })) merged.push(video);
+      });
+      return activeSubject === "全部" ? merged : merged.filter(function(video) { return video.subject === activeSubject; });
+    });
+  }
 
   return (
     <section className="section">
@@ -416,17 +450,11 @@ function LearningSpaceSection() {
               </div>
             ) : null}
             <div className={"learning-space-grid" + (layout === "list" ? " list-layout" : "")}>
-              {paged.map(function(video) { return <LearningVideoCard key={video.id} video={video} />; })}
+              {visibleVideos.map(function(video) { return <LearningVideoCard key={video.id} video={video} />; })}
+              <button className="learning-space-add-more" onClick={loadMoreVisibleVideos} type="button" aria-label="添加更多视频">
+                <span><Plus size={26} /></span>
+              </button>
             </div>
-            {totalPages > 1 ? (
-              <div className="pagination">
-                <button className="button secondary" disabled={page === 0} onClick={function() { setPage(0); }} type="button">{"首页"}</button>
-                <button className="button secondary" disabled={page === 0} onClick={function() { setPage(function(p) { return p - 1; }); }} type="button">{"上一页"}</button>
-                <span className="muted">{page + 1} / {totalPages}</span>
-                <button className="button secondary" disabled={page >= totalPages - 1} onClick={function() { setPage(function(p) { return p + 1; }); }} type="button">{"下一页"}</button>
-                <button className="button secondary" disabled={page >= totalPages - 1} onClick={function() { setPage(totalPages - 1); }} type="button">{"尾页"}</button>
-              </div>
-            ) : null}
           </>
         )}
       </div>
@@ -664,7 +692,11 @@ export default function HomePage() {
                   <div className="weak-point-info">
                     <span className="pill weak-subject-pill">{wp.subject}</span>
                     <strong className="weak-knowledge-name">{wp.knowledge}</strong>
-                    {weakPage * weakPageSize + i < 3 ? <span className={`weak-star ${weakPage * weakPageSize + i === 0 ? "top" : ""}`}><Star size={14} fill={weakPage * weakPageSize + i === 0 ? "#e6a817" : "none"} /></span> : null}
+                    <span className="weak-star-rating" title={`重要程度 ${importanceStars(wp.weight)} 星`}>
+                      {Array.from({ length: importanceStars(wp.weight) }).map((_, starIndex) => (
+                        <Star key={starIndex} size={14} fill="#e6a817" color="#e6a817" />
+                      ))}
+                    </span>
                   </div>
                   <div className="weak-point-bar">
                     <div className="weak-progress-bar">

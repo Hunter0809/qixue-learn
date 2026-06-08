@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { MarkdownRenderer } from "@/components/markdown-renderer";
 import { knowledgeName, resourceGroupKey, resourceSubject } from "@/components/resource-card";
+import { getLearnerProfile, loadCurrentUsername } from "@/lib/profile-storage";
 import type { Resource, ResourceResponse } from "@/lib/types";
 
 const REQUIRED_SECTIONS = ["知识点", "核心解释", "相关课程", "例题（含答案）", "练习题"];
@@ -58,7 +59,7 @@ function ResourceDetailContent() {
       fetch("/api/resource", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ knowledge: parsed.knowledge || parsed.title, type: parsed.type, style: "plain" })
+        body: JSON.stringify({ owner: loadCurrentUsername() || undefined, knowledge: parsed.knowledge || parsed.title, type: parsed.type, style: "plain", profile: getLearnerProfile() })
       })
         .then((response) => response.json() as Promise<ResourceResponse>)
         .then((data) => {

@@ -7,6 +7,12 @@ import { canonicalizeKnowledge, classifyKnowledgeFromText, normalizeSubject } fr
 import { getCachedHomeworkResponse, setCachedHomeworkResponse } from "@/lib/homework-response-cache";
 import { lookupStoredDictionary, type StoredDictionaryEntry } from "@/lib/server-db";
 import { logModuleRequest } from "@/lib/server-logger";
+import { persistHomeworkOutcome } from "@/lib/learning-persistence";
+import { z } from "zod";
+
+const dictionaryExamplesSchema = z.object({
+  examples: z.array(z.string()).min(2).max(6)
+});
 
 function cleanDictionaryText(value: string) {
   return value
@@ -56,6 +62,33 @@ function dictionarySections(entries: StoredDictionaryEntry[]) {
   ];
 }
 
+async function withAgentExamples(entries: StoredDictionaryEntry[], subject: string, content: string) {
+  const primary = entries[0];
+  if (!primary || primary.examples.length) return entries;
+  try {
+    const generated = await askDeepSeekStreamCollect(
+      [
+        "Dictionary Example Agent: 根据词典查询结果生成自然、适合学生理解的例句。",
+        "只返回 JSON，字段为 examples(string[])。",
+        "英文词给英文例句；中文词给中文例句；必要时可附简短中文语境。",
+        "例句必须围绕查询词本身，不要输出 Markdown。"
+      ].join("\n"),
+      dictionaryExamplesSchema,
+      { subject, query: content, entry: primary },
+      "word_lookup_examples"
+    );
+    return entries.map((entry, index) => index === 0 ? { ...entry, examples: generated.examples } : entry);
+  } catch {
+    return entries.map((entry, index) => index === 0 ? {
+      ...entry,
+      examples: [
+        `${entry.term} is useful in daily study and review.`,
+        `Please make one sentence with "${entry.term}" and explain its meaning.`
+      ]
+    } : entry);
+  }
+}
+
 function isSpecificKnowledgeCandidate(value: string) {
   const cleaned = value.trim();
   if (cleaned.length < 2 || cleaned.length > 30) return false;
@@ -66,6 +99,13 @@ function isSpecificKnowledgeCandidate(value: string) {
 
 function stripSubjectPrefix(value: string, subject: string) {
   const normalizedSubject = normalizeSubject(subject);
+  let next = value.trim();
+  [normalizedSubject, subject].filter(Boolean).forEach((prefix) => {
+    if (next.startsWith(prefix)) {
+      next = next.slice(prefix.length).replace(/^\s*[:：\-—]*\s*/, "").trim();
+    }
+  });
+  return next;
   return value
     .replace(new RegExp(`^\\s*${normalizedSubject}\\s*[:：\\-—]*\\s*`), "")
     .replace(new RegExp(`^\\s*${subject}\\s*[:：\\-—]*\\s*`), "")
@@ -121,7 +161,9 @@ export async function POST(request: Request) {
     if (body.feature === "word_lookup" && !body.forceAI) {
       const entries = await lookupStoredDictionary(body.content, body.subject);
       if (entries.length) {
-        return homeworkResponseSchema.parse({
+        const enrichedEntries = await withAgentExamples(entries, body.subject, body.content);
+        entries.splice(0, entries.length, ...enrichedEntries);
+        const value = homeworkResponseSchema.parse({
           feature: body.feature,
           title: `${entries[0].term} 词典查询`,
           answer: dictionaryMarkdown(entries),
@@ -141,6 +183,8 @@ export async function POST(request: Request) {
           similarPractice: [],
           nextAction: ""
         });
+        await persistHomeworkOutcome(body, value);
+        return value;
       }
       return homeworkResponseSchema.parse({
         feature: body.feature,
@@ -158,9 +202,9 @@ export async function POST(request: Request) {
     }
 
     const algorithm = runHomeworkAlgorithm(body);
-    const key = JSON.stringify({ body, algorithm });
+    const key = body.imageUrl ? "" : JSON.stringify({ body, algorithm });
     const now = Date.now();
-    const cached = await getCachedHomeworkResponse(key, now);
+    const cached = key ? await getCachedHomeworkResponse(key, now) : null;
 
     if (cached) return cached;
 
@@ -197,7 +241,8 @@ export async function POST(request: Request) {
       ...generated,
       knowledge: normalizedKnowledge
     });
-    await setCachedHomeworkResponse(key, value, now);
+    await persistHomeworkOutcome(body, value);
+    if (key) await setCachedHomeworkResponse(key, value, now);
     return value;
   });
 }

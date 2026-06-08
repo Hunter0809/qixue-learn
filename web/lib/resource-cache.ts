@@ -1,7 +1,7 @@
 "use client";
 
 import type { Resource } from "@/lib/types";
-import { getLearnerProfile } from "@/lib/profile-storage";
+import { getLearnerProfile, loadCurrentUsername } from "@/lib/profile-storage";
 
 const CACHE_KEY = "qixue_resource_cache";
 const GENERATING_KEY = "qixue_resource_generating";
@@ -173,7 +173,7 @@ export async function preGenerateResources(knowledge: string, subject: string): 
     const resp = await fetch("/api/resource", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ knowledge: requestKnowledge, type: "lecture", style: "plain", profile: getLearnerProfile() })
+      body: JSON.stringify({ owner: loadCurrentUsername() || undefined, knowledge: requestKnowledge, type: "lecture", style: "plain", profile: getLearnerProfile() })
     });
     if (!resp.ok) {
       markFailed(requestKnowledge);

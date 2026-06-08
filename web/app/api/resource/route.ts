@@ -56,7 +56,7 @@ export async function POST(request: Request) {
     const catalogPoint = canonicalizeKnowledge(body.knowledge, "", body.profile?.grade);
     const subject = catalogPoint?.subject || subjectFromRequestKnowledge(body.knowledge);
     const knowledge = catalogPoint ? `${catalogPoint.subject} ${catalogPoint.knowledge}` : body.knowledge.trim();
-    const stored = await getStoredResources(knowledge, body.profile);
+    const stored = await getStoredResources(knowledge, body.profile, body.owner);
     if (stored.length > 0) {
       return resourceResponseSchema.parse({ resources: stored });
     }
@@ -104,7 +104,7 @@ export async function POST(request: Request) {
     }
 
     const response = resourceResponseSchema.parse({ resources });
-    await saveStoredResources(response.resources, body.profile);
+    await saveStoredResources(response.resources, body.profile, body.owner);
     return response;
   });
 }

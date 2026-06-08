@@ -53,6 +53,7 @@ export const profileSchema = z.object({
 });
 
 export const planRequestSchema = z.object({
+  owner: z.string().optional(),
   subject: z.string().min(1),
   goal: z.string().min(6),
   dailyMinutes: z.number().int().min(15).max(240),
@@ -105,6 +106,7 @@ export const quizSubmitSchema = z.object({
 });
 
 export const resourceRequestSchema = z.object({
+  owner: z.string().optional(),
   knowledge: z.string().min(1),
   type: z.enum(["lecture", "exercise", "diagram", "analogy"]),
   style: z.enum(["plain", "exam", "practice"]),
@@ -151,6 +153,7 @@ export const reportSchema = z.object({
 });
 
 export const homeworkRequestSchema = z.object({
+  owner: z.string().optional(),
   feature: z.enum([
     "photo_search",
     "ai_answer",
@@ -186,7 +189,12 @@ export const homeworkResponseSchema = z.object({
     title: z.string(),
     items: z.array(z.string())
   })).optional(),
-  steps: z.array(z.string()).optional().default([]),
+  steps: z.preprocess((value) => {
+    if (typeof value === "string") {
+      return value.split(/\r?\n|[；;]/).map((item) => item.trim()).filter(Boolean);
+    }
+    return value;
+  }, z.array(z.string()).optional().default([])),
   knowledge: z.array(z.string()).optional().default([]),
   similarPractice: z.array(questionSchema).optional().default([]),
   nextAction: z.unknown().optional().transform((value) => {

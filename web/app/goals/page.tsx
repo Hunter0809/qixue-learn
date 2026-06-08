@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import useSWRMutation from "swr/mutation";
 import { Save, SlidersHorizontal } from "lucide-react";
 import { postJson } from "@/lib/fetcher";
+import { loadCurrentUsername } from "@/lib/profile-storage";
 import { useLearningStore } from "@/lib/store";
 import type { PlanRequest, PlanResponse } from "@/lib/types";
 import { ErrorBlock } from "@/components/status";
@@ -33,7 +34,7 @@ export default function GoalsPage() {
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (valid) void trigger(form);
+    if (valid) void trigger({ ...form, owner: loadCurrentUsername() || undefined });
   }
 
   return (

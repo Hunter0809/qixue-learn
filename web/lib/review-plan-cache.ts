@@ -1,6 +1,7 @@
 "use client";
 
 import type { PlanResponse } from "@/lib/types";
+import { loadCurrentUsername } from "@/lib/profile-storage";
 
 const PLAN_CACHE_KEY = "qixue_review_plan_cache";
 const PLAN_GENERATING_KEY = "qixue_review_plan_generating";
@@ -234,6 +235,7 @@ export async function preGenerateReviewPlanForSubject(subject: string, points: W
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        owner: loadCurrentUsername() || undefined,
         subject,
         goal: subjectPoints
           .slice(0, 10)

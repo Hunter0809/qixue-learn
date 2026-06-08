@@ -20,7 +20,7 @@ import {
 } from "@/components/resource-card";
 import { LoginModal } from "@/components/login-modal";
 import { ConfirmPopup, type ConfirmAction } from "@/components/confirm-popup";
-import { getLearnerProfile, isGuestSession, loadCurrentUserProfile, logoutUser } from "@/lib/profile-storage";
+import { getLearnerProfile, isGuestSession, loadCurrentUserProfile, loadCurrentUsername, logoutUser } from "@/lib/profile-storage";
 
 function mergeResources(primary: Resource[], secondary: Resource[]) {
   const map = new Map<string, Resource>();
@@ -101,7 +101,7 @@ function ResourcesContent() {
       };
       setFilter(next);
       setResourceFilter(next);
-      void trigger(next);
+      void trigger({ ...next, owner: loadCurrentUsername() || undefined });
     }
   }, [params]);
 
@@ -109,7 +109,7 @@ function ResourcesContent() {
     event.preventDefault();
     if (!canUsePersonalizedResources) return;
     setResourceFilter(filter);
-    const request = { ...filter, profile: getLearnerProfile() };
+    const request = { ...filter, owner: loadCurrentUsername() || undefined, profile: getLearnerProfile() };
     void trigger(request).then((response) => {
       if (response?.resources?.length) {
         setCachedResources(request.knowledge, response.resources);

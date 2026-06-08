@@ -19,9 +19,9 @@ import {
 import { postJson } from "@/lib/fetcher";
 import type { HomeworkFeature, HomeworkRequest, HomeworkResponse } from "@/lib/types";
 import { getFeatureConfig } from "@/lib/feature-config";
-import { getLearnerProfile, saveLearningHistory } from "@/lib/profile-storage";
+import { getLearnerProfile, loadCurrentUsername, saveLearningHistory } from "@/lib/profile-storage";
 import { useLearningStore, addWeakPoint, getWeakPoints, type WeakPoint } from "@/lib/store";
-import { preGenerateResources, getCachedResources } from "@/lib/resource-cache";
+import { getCachedResources } from "@/lib/resource-cache";
 import { ImageCropSelector } from "@/components/image-crop-selector";
 import { ErrorBlock } from "@/components/status";
 import { MarkdownRenderer } from "@/components/markdown-renderer";
@@ -228,6 +228,21 @@ function FollowUpActions({ text, onFollowUp }: { text: string; onFollowUp?: (que
       ))}
     </div>
   );
+}
+
+function persistBehaviorFromClient(request: HomeworkRequest, knowledge: string, correct: boolean) {
+  void fetch("/api/behavior", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      owner: loadCurrentUsername() || undefined,
+      subject: request.subject,
+      knowledge,
+      source: request.feature,
+      correct,
+      profile: getLearnerProfile()
+    })
+  }).catch(() => undefined);
 }
 
 function BlueprintResultBody({ data, feature, onFollowUp }: { data: HomeworkResponse; feature: HomeworkFeature; onFollowUp?: (question: string) => void }) {
@@ -438,6 +453,18 @@ function PracticeQuestion({ question, subject, feature }: { question: { id: stri
     setResult(correct ? "correct" : "wrong");
     setSubmitted(true);
     addWeakPoint(question.knowledge || subject, subject, "practice", correct);
+    void fetch("/api/behavior", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        owner: loadCurrentUsername() || undefined,
+        subject,
+        knowledge: question.knowledge || subject,
+        source: "practice",
+        correct,
+        profile: getLearnerProfile()
+      })
+    }).catch(() => undefined);
   }
 
   return (
@@ -459,19 +486,44 @@ function PracticeQuestion({ question, subject, feature }: { question: { id: stri
 
 
 
-const MAX_VISION_IMAGE_EDGE = 1280;
-const VISION_IMAGE_QUALITY = 0.72;
+const MAX_VISION_IMAGE_EDGE = 1024;
+const MIN_VISION_IMAGE_EDGE = 640;
+const VISION_IMAGE_QUALITY = 0.62;
+const MIN_VISION_IMAGE_QUALITY = 0.34;
+const MAX_VISION_IMAGE_DATA_URL_LENGTH = 900_000;
 const CLIENT_STREAM_TIMEOUT_MS = 180000;
 
-function canvasToCompressedDataUrl(canvas: HTMLCanvasElement) {
-  const scale = Math.min(1, MAX_VISION_IMAGE_EDGE / Math.max(canvas.width, canvas.height));
+function drawScaledCanvas(canvas: HTMLCanvasElement, maxEdge: number) {
+  const scale = Math.min(1, maxEdge / Math.max(canvas.width, canvas.height));
   const output = document.createElement("canvas");
   output.width = Math.max(1, Math.round(canvas.width * scale));
   output.height = Math.max(1, Math.round(canvas.height * scale));
   const context = output.getContext("2d");
-  if (!context) return canvas.toDataURL("image/jpeg", VISION_IMAGE_QUALITY);
+  if (!context) return canvas;
   context.drawImage(canvas, 0, 0, output.width, output.height);
-  return output.toDataURL("image/jpeg", VISION_IMAGE_QUALITY);
+  return output;
+}
+
+function canvasToCompressedDataUrl(canvas: HTMLCanvasElement) {
+  let maxEdge = MAX_VISION_IMAGE_EDGE;
+  let quality = VISION_IMAGE_QUALITY;
+  let output = drawScaledCanvas(canvas, maxEdge);
+  let dataUrl = output.toDataURL("image/jpeg", quality);
+
+  while (
+    dataUrl.length > MAX_VISION_IMAGE_DATA_URL_LENGTH &&
+    (quality > MIN_VISION_IMAGE_QUALITY || maxEdge > MIN_VISION_IMAGE_EDGE)
+  ) {
+    if (quality > MIN_VISION_IMAGE_QUALITY) {
+      quality = Math.max(MIN_VISION_IMAGE_QUALITY, quality - 0.12);
+    } else {
+      maxEdge = Math.max(MIN_VISION_IMAGE_EDGE, Math.round(maxEdge * 0.82));
+      output = drawScaledCanvas(canvas, maxEdge);
+    }
+    dataUrl = output.toDataURL("image/jpeg", quality);
+  }
+
+  return dataUrl;
 }
 
 function fileToCompressedDataUrl(file: File) {
@@ -645,7 +697,6 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
       for (const k of responseKnowledge) {
         // 使用 feature 感知的正确性判定
         addWeakPoint(k, request.subject, feature, isFeatureCorrect(feature));
-        preGenerateResources(k, request.subject);
       }
       // 相似练习题也关联薄弱点追踪
       if (response.similarPractice?.length && responseKnowledge.length < 3) {
@@ -663,13 +714,14 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!content.trim() && !imageUrl) return;
-    const request: HomeworkRequest = { feature: config.feature, subject, content: content.trim() || "请识别并分析图片内容", profile: getLearnerProfile(), imageUrl: imageUrl || undefined };
+    const request: HomeworkRequest = { owner: loadCurrentUsername() || undefined, feature: config.feature, subject, content: content.trim() || "请识别并分析图片内容", profile: getLearnerProfile(), imageUrl: imageUrl || undefined };
     runHomeworkRequest(request);
   }
 
   function askAIWordLookup() {
     if (!content.trim()) return;
     const request: HomeworkRequest = {
+      owner: loadCurrentUsername() || undefined,
       feature: config.feature,
       subject,
       content: content.trim(),
@@ -685,6 +737,7 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
     if (feature === "ai_answer") setContent(nextContent);
     setStoreState("ai_answer", { content: nextContent, subject, error: undefined });
     const request: HomeworkRequest = {
+      owner: loadCurrentUsername() || undefined,
       feature: "ai_answer",
       subject,
       content: nextContent,
@@ -696,6 +749,7 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
 
   function runImageRequest(nextImageUrl: string) {
     const request: HomeworkRequest = {
+      owner: loadCurrentUsername() || undefined,
       feature: config.feature,
       subject,
       content: content.trim() || "Please identify and solve the problem in the image.",
@@ -762,7 +816,7 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
         const isCorrect = isFeatureCorrect(request.feature);
         match[1].split(/[,，、]/).map((item) => item.trim()).filter(Boolean).slice(0, 3).forEach((item) => {
           addWeakPoint(item, request.subject, request.feature, isCorrect);
-          preGenerateResources(item, request.subject);
+          persistBehaviorFromClient(request, item, isCorrect);
         });
       }
     } catch (err) {

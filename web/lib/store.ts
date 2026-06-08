@@ -134,6 +134,7 @@ export type WeakPoint = {
 
 
 const WEAK_POINTS_KEY = "qixue_weak_points";
+const WEAK_POINT_THRESHOLD = 25;
 
 function stableHash(value: string): string {
   let hash = 2166136261;
@@ -245,7 +246,7 @@ function compactKnowledgeTerm(item: string): string {
 }
 
 export function getWeakPoints(): WeakPoint[] {
-  return loadWeakPoints().filter((point) => point.weight > 0).sort((a, b) => b.weight - a.weight);
+  return loadWeakPoints().filter((point) => point.weight >= WEAK_POINT_THRESHOLD).sort((a, b) => b.weight - a.weight);
 }
 
 export function deleteWeakPoint(point: Pick<WeakPoint, "subject" | "knowledge">) {
@@ -342,7 +343,7 @@ export function addWeakPoint(knowledge: string, subject: string, source: string,
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("qixue:weak-point-updated", { detail: { knowledge: normalizedKnowledge, subject: normalizedSubject, source, correct } }));
   }
-  if (typeof window !== "undefined" && !correct) {
+  if (typeof window !== "undefined" && !correct && activePoints.some((point) => point.subject === normalizedSubject && point.knowledge === normalizedKnowledge && point.weight >= WEAK_POINT_THRESHOLD)) {
     void import("@/lib/resource-cache").then((module) => module.preGenerateResources(normalizedKnowledge, normalizedSubject));
     void import("@/lib/review-plan-cache").then((module) => module.preGenerateReviewPlanForSubject(
       normalizedSubject,

@@ -3,7 +3,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { canonicalizeKnowledge } from "@/lib/knowledge-catalog";
-import type { LearnerProfile, Resource } from "@/lib/types";
+import type { HomeworkRequest, HomeworkResponse, LearnerProfile, PlanResponse, Resource } from "@/lib/types";
 
 const WORKSPACE_ROOT = path.basename(process.cwd()) === "web" ? path.dirname(process.cwd()) : process.cwd();
 const DB_DIR = path.join(WORKSPACE_ROOT, "database");
@@ -65,6 +65,36 @@ async function ensurePgSchema() {
         difficulty TEXT NOT NULL DEFAULT '',
         updated_at BIGINT NOT NULL
       )`,
+      `CREATE TABLE IF NOT EXISTS learning_records (
+        id TEXT PRIMARY KEY,
+        owner TEXT NOT NULL,
+        feature TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        input TEXT NOT NULL,
+        response_json TEXT NOT NULL,
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL
+      )`,
+      "CREATE INDEX IF NOT EXISTS idx_learning_records_owner ON learning_records (owner, updated_at)",
+      `CREATE TABLE IF NOT EXISTS review_plans (
+        id TEXT PRIMARY KEY,
+        owner TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        plan_json TEXT NOT NULL,
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL
+      )`,
+      "CREATE INDEX IF NOT EXISTS idx_review_plans_owner_subject ON review_plans (owner, subject, updated_at)",
+      `CREATE TABLE IF NOT EXISTS learning_behaviors (
+        id TEXT PRIMARY KEY,
+        owner TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        knowledge TEXT NOT NULL,
+        source TEXT NOT NULL,
+        weight DOUBLE PRECISION NOT NULL,
+        created_at BIGINT NOT NULL
+      )`,
+      "CREATE INDEX IF NOT EXISTS idx_learning_behaviors_owner_knowledge ON learning_behaviors (owner, subject, knowledge, created_at)",
       `CREATE TABLE IF NOT EXISTS dictionary_entries (
         language TEXT NOT NULL,
         term TEXT NOT NULL,
@@ -317,6 +347,39 @@ function getDb() {
       updated_at INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS learning_records (
+      id TEXT PRIMARY KEY,
+      owner TEXT NOT NULL,
+      feature TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      input TEXT NOT NULL,
+      response_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_learning_records_owner ON learning_records (owner, updated_at);
+
+    CREATE TABLE IF NOT EXISTS review_plans (
+      id TEXT PRIMARY KEY,
+      owner TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      plan_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_review_plans_owner_subject ON review_plans (owner, subject, updated_at);
+
+    CREATE TABLE IF NOT EXISTS learning_behaviors (
+      id TEXT PRIMARY KEY,
+      owner TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      knowledge TEXT NOT NULL,
+      source TEXT NOT NULL,
+      weight REAL NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_learning_behaviors_owner_knowledge ON learning_behaviors (owner, subject, knowledge, created_at);
+
     CREATE TABLE IF NOT EXISTS dictionary_entries (
       language TEXT NOT NULL,
       term TEXT NOT NULL,
@@ -555,16 +618,17 @@ export async function lookupStoredDictionary(raw: string, subject?: string, limi
   }));
 }
 
-function profileKey(profile: unknown) {
+function profileKey(profile: unknown, owner?: string) {
+  if (owner?.trim()) return owner.trim().toLowerCase();
   if (!profile || typeof profile !== "object") return "";
   const p = profile as { region?: string; school?: string; grade?: string; difficulty?: string };
   return [p.region, p.school, p.grade, p.difficulty].map((item) => item || "").join("|");
 }
 
-export async function getStoredResources(knowledge: string, profile?: unknown): Promise<Resource[]> {
+export async function getStoredResources(knowledge: string, profile?: unknown, owner?: string): Promise<Resource[]> {
   if (usePostgres()) {
     await ensurePgSchema();
-    const key = profileKey(profile);
+    const key = profileKey(profile, owner);
     const rows = await getPg().query(`
       SELECT id, title, type, subject, knowledge, difficulty, summary, content
       FROM resources
@@ -585,7 +649,7 @@ export async function getStoredResources(knowledge: string, profile?: unknown): 
     }));
   }
   const database = getDb();
-  const key = profileKey(profile);
+  const key = profileKey(profile, owner);
   const rows = database.prepare(`
     SELECT id, title, type, subject, knowledge, difficulty, summary, content
     FROM resources
@@ -606,10 +670,10 @@ export async function getStoredResources(knowledge: string, profile?: unknown): 
   }));
 }
 
-export async function saveStoredResources(resources: Resource[], profile?: unknown) {
+export async function saveStoredResources(resources: Resource[], profile?: unknown, owner?: string) {
   if (usePostgres()) {
     await ensurePgSchema();
-    const key = profileKey(profile);
+    const key = profileKey(profile, owner);
     const now = Date.now();
     const sql = getPg();
     await Promise.all(resources.map((item) => sql.query(`
@@ -629,7 +693,7 @@ export async function saveStoredResources(resources: Resource[], profile?: unkno
     return;
   }
   const database = getDb();
-  const key = profileKey(profile);
+  const key = profileKey(profile, owner);
   const now = Date.now();
   const stmt = database.prepare(`
     INSERT INTO resources (id, subject, knowledge, type, difficulty, title, summary, content, profile_key, created_at, updated_at)
@@ -666,15 +730,17 @@ export async function deleteStoredResource(resourceId: string) {
   getDb().prepare("DELETE FROM resources WHERE id = ?").run(resourceId);
 }
 
-export async function getStoredResourceFeed(limit = 80): Promise<Resource[]> {
+export async function getStoredResourceFeed(limit = 80, owner = ""): Promise<Resource[]> {
   if (usePostgres()) {
     await ensurePgSchema();
+    const key = owner.trim().toLowerCase();
     const rows = await getPg().query(`
       SELECT id, title, type, subject, knowledge, difficulty, summary, content
       FROM resources
+      WHERE ($2 = '' OR profile_key = $2 OR profile_key = '')
       ORDER BY updated_at DESC
       LIMIT $1
-    `, [limit]) as Array<Record<string, string>>;
+    `, [limit, key]) as Array<Record<string, string>>;
 
     return rows.map((row) => ({
       id: row.id,
@@ -687,12 +753,14 @@ export async function getStoredResourceFeed(limit = 80): Promise<Resource[]> {
       content: row.content || undefined
     }));
   }
+  const key = owner.trim().toLowerCase();
   const rows = getDb().prepare(`
     SELECT id, title, type, subject, knowledge, difficulty, summary, content
     FROM resources
+    WHERE (? = '' OR profile_key = ? OR profile_key = '')
     ORDER BY updated_at DESC
     LIMIT ?
-  `).all(limit) as Array<Record<string, string>>;
+  `).all(key, key, limit) as Array<Record<string, string>>;
 
   return rows.map((row) => ({
     id: row.id,
@@ -780,6 +848,149 @@ export async function getStoredWeakPoints(owner: string, limit = 24): Promise<St
     source: String(row.source),
     updatedAt: Number(row.updated_at)
   }));
+}
+
+export async function saveStoredLearningRecord(input: {
+  owner: string;
+  request: HomeworkRequest;
+  response: HomeworkResponse;
+}) {
+  const owner = input.owner.trim().toLowerCase() || "__anonymous__";
+  const now = Date.now();
+  const id = `${owner}_${input.request.feature}_${now}`;
+  if (usePostgres()) {
+    await ensurePgSchema();
+    await getPg().query(`
+      INSERT INTO learning_records (id, owner, feature, subject, input, response_json, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      ON CONFLICT(id) DO UPDATE SET
+        response_json = EXCLUDED.response_json,
+        updated_at = EXCLUDED.updated_at
+    `, [
+      id,
+      owner,
+      input.request.feature,
+      input.request.subject,
+      input.request.content,
+      JSON.stringify(input.response),
+      now,
+      now
+    ]);
+    return;
+  }
+  getDb().prepare(`
+    INSERT INTO learning_records (id, owner, feature, subject, input, response_json, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      response_json = excluded.response_json,
+      updated_at = excluded.updated_at
+  `).run(id, owner, input.request.feature, input.request.subject, input.request.content, JSON.stringify(input.response), now, now);
+}
+
+export async function saveStoredReviewPlan(input: {
+  owner: string;
+  subject: string;
+  plan: PlanResponse;
+}) {
+  const owner = input.owner.trim().toLowerCase() || "__anonymous__";
+  const now = Date.now();
+  const id = `${owner}_${input.subject}_${input.plan.planId}`;
+  if (usePostgres()) {
+    await ensurePgSchema();
+    await getPg().query(`
+      INSERT INTO review_plans (id, owner, subject, plan_json, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT(id) DO UPDATE SET
+        plan_json = EXCLUDED.plan_json,
+        updated_at = EXCLUDED.updated_at
+    `, [id, owner, input.subject, JSON.stringify(input.plan), now, now]);
+    return;
+  }
+  getDb().prepare(`
+    INSERT INTO review_plans (id, owner, subject, plan_json, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      plan_json = excluded.plan_json,
+      updated_at = excluded.updated_at
+  `).run(id, owner, input.subject, JSON.stringify(input.plan), now, now);
+}
+
+export async function getStoredReviewPlans(owner: string, limit = 12): Promise<Array<{ subject: string; plan: PlanResponse; updatedAt: number }>> {
+  const normalizedOwner = owner.trim().toLowerCase() || "__anonymous__";
+  if (usePostgres()) {
+    await ensurePgSchema();
+    const rows = await getPg().query(`
+      SELECT subject, plan_json, updated_at
+      FROM review_plans
+      WHERE owner = $1
+      ORDER BY updated_at DESC
+      LIMIT $2
+    `, [normalizedOwner, limit]) as Array<Record<string, string | number>>;
+    return rows.map((row) => ({
+      subject: String(row.subject),
+      plan: JSON.parse(String(row.plan_json)) as PlanResponse,
+      updatedAt: Number(row.updated_at)
+    }));
+  }
+  const rows = getDb().prepare(`
+    SELECT subject, plan_json, updated_at
+    FROM review_plans
+    WHERE owner = ?
+    ORDER BY updated_at DESC
+    LIMIT ?
+  `).all(normalizedOwner, limit) as Array<Record<string, string | number>>;
+  return rows.map((row) => ({
+    subject: String(row.subject),
+    plan: JSON.parse(String(row.plan_json)) as PlanResponse,
+    updatedAt: Number(row.updated_at)
+  }));
+}
+
+export async function saveStoredLearningBehavior(input: {
+  owner: string;
+  subject: string;
+  knowledge: string;
+  source: string;
+  weight: number;
+}) {
+  const owner = input.owner.trim().toLowerCase() || "__anonymous__";
+  const now = Date.now();
+  const id = `${owner}_${input.source}_${now}_${Math.random().toString(36).slice(2, 8)}`;
+  if (usePostgres()) {
+    await ensurePgSchema();
+    await getPg().query(`
+      INSERT INTO learning_behaviors (id, owner, subject, knowledge, source, weight, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [id, owner, input.subject, input.knowledge, input.source, input.weight, now]);
+    return;
+  }
+  getDb().prepare(`
+    INSERT INTO learning_behaviors (id, owner, subject, knowledge, source, weight, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(id, owner, input.subject, input.knowledge, input.source, input.weight, now);
+}
+
+export async function getStoredLearningBehaviorWeight(input: {
+  owner: string;
+  subject: string;
+  knowledge: string;
+}): Promise<number> {
+  const owner = input.owner.trim().toLowerCase() || "__anonymous__";
+  if (usePostgres()) {
+    await ensurePgSchema();
+    const rows = await getPg().query(`
+      SELECT COALESCE(SUM(weight), 0) AS total
+      FROM learning_behaviors
+      WHERE owner = $1 AND subject = $2 AND knowledge = $3
+    `, [owner, input.subject, input.knowledge]) as Array<Record<string, string | number>>;
+    return Number(rows[0]?.total || 0);
+  }
+  const row = getDb().prepare(`
+    SELECT COALESCE(SUM(weight), 0) AS total
+    FROM learning_behaviors
+    WHERE owner = ? AND subject = ? AND knowledge = ?
+  `).get(owner, input.subject, input.knowledge) as { total?: number } | undefined;
+  return Number(row?.total || 0);
 }
 
 export async function saveStoredUserProfile(profile: StoredUserProfile) {

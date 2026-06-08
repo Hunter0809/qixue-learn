@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     const [storedProfile, weakPoints, recommendedResources] = await Promise.all([
       getStoredUserProfile(owner),
       getStoredWeakPoints(owner),
-      getStoredResourceFeed()
+      getStoredResourceFeed(80, owner)
     ]);
     const totalWeakness = weakPoints.reduce((sum, point) => sum + Math.max(0, point.weight), 0);
     const averageWeakness = weakPoints.length ? totalWeakness / weakPoints.length : 0;
