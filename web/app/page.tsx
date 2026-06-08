@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -155,27 +155,30 @@ const VIDEO_TARGET_PER_STAGE = 1000;
 const LEARNING_SPACE_CACHE_KEY = "qixue_learning_space_cache";
 const LEARNING_SPACE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
-const IRRELEVANT_KEYWORDS = /娓告垙|鎵嬫父|绔父|LOL|鐜嬭€呰崳鑰€|鍘熺|鑻遍泟鑱旂洘|宕╁潖|涓夊浗鏉€|鍚冮浮|姘稿姭|缁濆湴姹傜敓|鍜屽钩绮捐嫳|绗簲浜烘牸|鏄庢棩鏂硅垷|闃撮槼甯坾宕╁潖鏄熺┕|鎴戠殑涓栫晫|杩蜂綘涓栫晫|鎽╁皵搴勫洯|铔嬩粩娲惧|鏆楀尯绐佸洿|楝肩暁|鎼炵瑧|濞变箰|鏁存椿/i;
-const NON_EDUCATIONAL = /鐩存挱|甯﹁揣|甯傚満|鎶曡祫|鐞嗚储|鑲＄エ|鍩硅|鍏荤敓|缇庨|鏃呰|鎺㈠簵|娴嬭瘎|鎼厤|鏈嶈|鍖栧|缇庡|鍙戝瀷|缇庣敳|缇庨|缇庡|鍙戝瀷|缇庡彂|缇庝綋|缇庤兏|缇庤儗|缇庡|鎶よ偆|褰╁|绌挎惌|鏃跺皻|娼祦|鍝佺墝|濂界墿|寮€绠眧绉嶈崏|鎷旇崏|瀹夊埄|娴嬭瘎|绉嶈崏鏈簗濂界墿鎺ㄨ崘|濂界墿鍒嗕韩|濂界墿绉嶈崏|濂界墿瀹夊埄濂界墿鍒嗕韩|濂界墿鎺ㄨ崘|濂界墿瀹夊埄/i;
+const IRRELEVANT_KEYWORDS = /游戏|手游|端游|LOL|王者荣耀|原神|英雄联盟|崩坏|三国杀|吃鸡|永劫|绝地求生|和平精英|第五人格|明日方舟|阴阳师|崩坏星穹|我的世界|迷你世界|摩尔庄园|蛋仔派对|暗区突围|搞笑|娱乐|整活/i;
+const NON_EDUCATIONAL = /直播|带货|市场|投资|理财|股票|养生|美食|旅行|探店|测评|穿搭|服装|化妆|美妆|发型|美甲|美容|护肤|彩妆|时尚|潮流|品牌|好物|开箱|种草|拔草|安利/i;
 
-function educationStageFromGrade(grade?: string): "灏忓" | "鍒濅腑" | "楂樹腑" | "澶у" {
-  if (!grade) return "楂樹腑";
-  if (grade.includes("灏忓")) return "灏忓";
-  if (grade.includes("鍒濅")) return "鍒濅腑";
-  if (grade.includes("楂樹")) return "楂樹腑";
-  if (grade.includes("澶у") || grade.includes("鐮旂┒")) return "澶у";
-  return "楂樹腑";
+type EducationStage = "小学" | "初中" | "高中" | "大学";
+
+const STAGE_SUBJECT_MAP: Record<EducationStage, string[]> = {
+  "小学": ["小学数学", "小学语文", "小学英语", "小学科学"],
+  "初中": ["初中数学", "初中语文", "初中英语", "初中物理", "初中化学", "初中生物", "初中历史", "初中地理", "初中道德与法治"],
+  "高中": ["高中数学", "高中语文", "高中英语", "高中物理", "高中化学", "高中生物", "高中历史", "高中地理", "高中政治"],
+  "大学": ["高等数学", "线性代数", "信息论与编码", "大学英语", "大学物理", "程序设计", "数据结构", "计算机类", "电子信息类", "机械类", "土木建筑类", "经济管理类", "法学类", "医学类"]
+};
+
+function educationStageFromGrade(grade?: string): EducationStage {
+  if (!grade) return "高中";
+  if (grade.includes("小学")) return "小学";
+  if (grade.includes("初")) return "初中";
+  if (grade.includes("高")) return "高中";
+  if (grade.includes("大学") || grade.includes("研究")) return "大学";
+  return "高中";
 }
 
 function buildSearchKeywords(userProfile: ReturnType<typeof loadCurrentUserProfile>, weakPoints: WeakPoint[]): string[] {
-  const stageSubjectMap: Record<"灏忓" | "鍒濅腑" | "楂樹腑" | "澶у", string[]> = {
-    "灏忓": ["灏忓鏁板", "灏忓璇枃", "灏忓鑻辫", "灏忓绉戝"],
-    "鍒濅腑": ["鍒濅腑鏁板", "鍒濅腑璇枃", "鍒濅腑鑻辫", "鍒濅腑鐗╃悊", "鍒濅腑鍖栧", "鍒濅腑鐢熺墿"],
-    "楂樹腑": ["楂樹腑鏁板", "楂樹腑璇枃", "楂樹腑鑻辫", "楂樹腑鐗╃悊", "楂樹腑鍖栧", "楂樹腑鐢熺墿"],
-    "澶у": ["楂樼瓑鏁板", "绾挎€т唬鏁?", "淇℃伅璁轰笌缂栫爜", "澶у鑻辫", "澶у鐗╃悊", "绋嬪簭璁捐", "鏁版嵁缁撴瀯", "璁＄畻鏈虹被", "鐢靛瓙淇℃伅绫?", "鏈烘绫?", "鍦熸湪寤虹瓚绫?", "缁忔祹绠＄悊绫?", "娉曞绫?", "鍖诲绫?"]
-  };
   const stage = educationStageFromGrade(userProfile?.grade || undefined);
-  const base = stageSubjectMap[stage];
+  const base = STAGE_SUBJECT_MAP[stage];
   if (weakPoints.length > 0) {
     const sw = weakPoints.slice(0, 5).map((wp) => `${wp.subject} ${wp.knowledge}`);
     return sw.concat(base).slice(0, 6);
@@ -186,7 +189,7 @@ function buildSearchKeywords(userProfile: ReturnType<typeof loadCurrentUserProfi
 const SUBJECT_NAMES = ["全部", "数学", "语文", "英语", "物理", "化学", "生物", "历史", "地理", "政治", "科学", "计算机类", "电子信息类", "机械类", "土木建筑类", "医学类", "经济管理类", "法学类", "外语类", "化工类", "物理学类"];
 
 const SUBJECT_RELATED: Record<string, string[]> = {
-  "数学": ["数学", "高数", "线性代数", "概率", "微积分", "解析几何", "统计", "代数"],
+  "数学": ["数学", "高数", "高等数学", "线性代数", "概率", "微积分", "解析几何", "统计", "代数"],
   "语文": ["语文", "阅读", "作文", "古诗", "文言文", "写作", "文学", "名著"],
   "英语": ["英语", "听力", "口语", "语法", "词汇", "翻译", "托福", "雅思", "GRE"],
   "物理": ["物理", "力学", "电磁学", "光学", "热学", "量子", "电路"],
@@ -213,9 +216,8 @@ function isVideoSubjectRelevant(title: string, description: string, subject: str
   const related = SUBJECT_RELATED[subject];
   if (!related) return true;
   const text = `${title} ${description || ""}`.toLowerCase();
-  return related.some((kw) => text.includes(kw.toLowerCase()));
+  return related.some((kw) => text.includes(kw.toLowerCase())) || text.includes(subject.toLowerCase());
 }
-
 function importanceStars(weight: number) {
   if (weight >= 85) return 5;
   if (weight >= 65) return 4;
@@ -278,7 +280,7 @@ function LearningSpaceSection() {
   var totalResults = _total[0], setTotalResults = _total[1];
   var _broadSearching = useState(false);
   var broadSearching = _broadSearching[0], setBroadSearching = _broadSearching[1];
-  var _activeSubject = useState("鍏ㄩ儴");
+  var _activeSubject = useState("全部");
   var activeSubject = _activeSubject[0], setActiveSubject = _activeSubject[1];
   var _allFetched = useState<VideoResource[]>([]);
   var allFetched = _allFetched[0], setAllFetched = _allFetched[1];
@@ -288,12 +290,7 @@ function LearningSpaceSection() {
   var stage = educationStageFromGrade(user?.grade || undefined);
   var level = stage;
 
-  var stageSubjectMap: Record<string, string[]> = {
-    "灏忓": ["灏忓鏁板", "灏忓璇枃", "灏忓鑻辫", "灏忓绉戝"],
-    "鍒濅腑": ["鍒濅腑鏁板", "鍒濅腑璇枃", "鍒濅腑鑻辫", "鍒濅腑鐗╃悊", "鍒濅腑鍖栧", "鍒濅腑鐢熺墿"],
-    "楂樹腑": ["楂樹腑鏁板", "楂樹腑璇枃", "楂樹腑鑻辫", "楂樹腑鐗╃悊", "楂樹腑鍖栧", "楂樹腑鐢熺墿", "楂樹腑鍘嗗彶", "楂樹腑鍦扮悊", "楂樹腑鏀挎不"],
-    "澶у": ["楂樼瓑鏁板", "绾挎€т唬鏁?", "淇℃伅璁轰笌缂栫爜", "澶у鑻辫", "澶у鐗╃悊", "绋嬪簭璁捐", "鏁版嵁缁撴瀯", "璁＄畻鏈虹被", "鐢靛瓙淇℃伅绫?", "鏈烘绫?", "鍦熸湪寤虹瓚绫?", "缁忔祹绠＄悊绫?", "娉曞绫?", "鍖诲绫?"]
-  };
+  var stageSubjectMap: Record<EducationStage, string[]> = STAGE_SUBJECT_MAP;
 
   async function fetchSubjectVideos(subject: string, maxPages: number, cancelledRef: { v: boolean }, broad?: boolean): Promise<VideoResource[]> {
     var results: VideoResource[] = [];
@@ -303,14 +300,14 @@ function LearningSpaceSection() {
         var resp = await fetch("/api/video-search", {
           method: "POST",
           headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({keyword: subject + " 鏁欏", level, page: pi, pageSize: 50, broad: !!broad})
+          body: JSON.stringify({keyword: subject + " 教学", level, page: pi, pageSize: 50, broad: !!broad})
         });
         var data = await resp.json();
         if (!data.videos || !data.videos.length) break;
         for (var vi = 0; vi < data.videos.length; vi++) {
           var v = data.videos[vi];
           if (IRRELEVANT_KEYWORDS.test(v.title) || IRRELEVANT_KEYWORDS.test(v.description || "")) continue;
-          var mainSubject = subject.replace(/灏忓|鍒濅腑|楂樹腑|楂樿€億澶у|鑰冪爺/g, "");
+          var mainSubject = subject.replace(/小学|初中|高中|大学|考研/g, "");
           if (!isVideoSubjectRelevant(v.title, v.description || "", mainSubject)) continue;
           var exists = results.some(function(r) { return r.url.includes(v.bvid); });
           if (exists) continue;
@@ -356,14 +353,14 @@ function LearningSpaceSection() {
       setLoading(true);
       setSearchResults([]);
       try {
-        var subjects = stageSubjectMap[stage] || stageSubjectMap["楂樹腑"];
+        var subjects = stageSubjectMap[stage] || stageSubjectMap["高中"];
         var cachedResults = readLearningSpaceCache(stage);
         var allResults: VideoResource[] = cachedResults ? cachedResults.slice() : [];
         if (cachedResults && cachedResults.length > 0) {
           setAllFetched(cachedResults);
           setVideos(cachedResults);
           setTotalResults(cachedResults.length);
-          setSearchKeyword(stage + " 瀛︿範瑙嗛");
+          setSearchKeyword(stage + " 学习视频");
           setLoading(false);
         }
         for (var si = 0; si < subjects.length; si++) {
@@ -379,7 +376,7 @@ function LearningSpaceSection() {
             setAllFetched(allResults.slice());
             setVideos(allResults.slice());
             setTotalResults(allResults.length);
-            setSearchKeyword(stage + " 瀛︿範瑙嗛");
+            setSearchKeyword(stage + " 学习视频");
           }
           if (allResults.length >= VIDEO_TARGET_PER_STAGE) break;
         }
@@ -389,7 +386,7 @@ function LearningSpaceSection() {
             setAllFetched(allResults);
             setVideos(allResults);
             setTotalResults(allResults.length);
-            setSearchKeyword(stage + " 瀛︿範瑙嗛");
+            setSearchKeyword(stage + " 学习视频");
           } else {
             try {
               var remote = await loadEducationalVideos();
@@ -399,7 +396,7 @@ function LearningSpaceSection() {
                 setAllFetched(fallbackVideos);
                 setVideos(fallbackVideos);
                 setTotalResults(fallbackVideos.length);
-                setSearchKeyword(level + " 绮鹃€夎棰?");
+                setSearchKeyword(level + " 精选视频");
               }
             } catch (_e) { /* ignore */ }
           }
@@ -417,8 +414,8 @@ function LearningSpaceSection() {
     setPage(0);
     setVisibleVideoCount(INITIAL_VISIBLE_VIDEOS);
     setSearchResults([]);
-    setSearchKeyword(stage + " 瀛︿範瑙嗛");
-    if (subject === "鍏ㄩ儴") {
+    setSearchKeyword(stage + " 学习视频");
+    if (subject === "全部") {
       setVideos(allFetched);
     } else {
       setVideos(allFetched.filter(function(v) { return v.subject === subject; }));
@@ -430,19 +427,19 @@ function LearningSpaceSection() {
     setBroadSearching(true);
     setSearchResults([]);
     try {
-      var subjectPrefix = activeSubject === "鍏ㄩ儴" ? "" : activeSubject;
+      var subjectPrefix = activeSubject === "全部" ? "" : activeSubject;
       var searchKeywordText = [subjectPrefix, videoQuery.trim()].filter(Boolean).join(" ");
       var results = await fetchSubjectVideos(searchKeywordText, 20, { v: false }, true);
       setSearchResults(results);
       setPage(0);
       setVisibleVideoCount(INITIAL_VISIBLE_VIDEOS);
-      setSearchKeyword((subjectPrefix ? subjectPrefix + " " : "") + videoQuery.trim() + " 鍏ㄧ綉缁撴灉");
+      setSearchKeyword((subjectPrefix ? subjectPrefix + " " : "") + videoQuery.trim() + " 全网结果");
     } finally {
       setBroadSearching(false);
     }
   }
 
-  var categoryTabs = ["鍏ㄩ儴"].concat(
+  var categoryTabs = ["全部"].concat(
     Array.from(new Set(allFetched.map(function(video) { return video.subject; })))
   );
 
@@ -460,7 +457,7 @@ function LearningSpaceSection() {
     var nextCount = visibleVideoCount + LOAD_MORE_VIDEOS;
     setVisibleVideoCount(nextCount);
     if (filteredVideos.length >= nextCount) return;
-    var targetSubject = activeSubject === "鍏ㄩ儴" ? (stageSubjectMap[stage] || stageSubjectMap["楂樹腑"])[0] : activeSubject;
+    var targetSubject = activeSubject === "全部" ? (stageSubjectMap[stage] || stageSubjectMap["高中"])[0] : activeSubject;
     var more = await fetchSubjectVideos(targetSubject, Math.ceil(nextCount / 50) + 1, { v: false }, true);
     setAllFetched(function(prev) {
       var merged = mergeVideoLists(prev, more);
@@ -469,7 +466,7 @@ function LearningSpaceSection() {
     });
     setVideos(function(prev) {
       var merged = mergeVideoLists(prev, more);
-      return activeSubject === "鍏ㄩ儴" ? merged : merged.filter(function(video) { return video.subject === activeSubject; });
+      return activeSubject === "全部" ? merged : merged.filter(function(video) { return video.subject === activeSubject; });
     });
   }
 
@@ -477,7 +474,7 @@ function LearningSpaceSection() {
     <section className="section">
       <div className="card learning-space-card">
         <div className="panel-heading">
-          <h2 className="card-title">{"瀛︿範绌洪棿"} 路 {activeSubject}</h2>
+          <h2 className="card-title">{"学习空间"} · {activeSubject}</h2>
           <div className="learning-space-controls">
             <button className={"icon-button secondary" + (layout === "grid" ? " active" : "")} style={{"minWidth": 32, "minHeight": 32, "padding": 0}} onClick={function() { setPage(0); setLayout("grid"); }} type="button"><LayoutGrid size={16} /></button>
             <button className={"icon-button secondary" + (layout === "list" ? " active" : "")} style={{"minWidth": 32, "minHeight": 32, "padding": 0}} onClick={function() { setPage(0); setLayout("list"); }} type="button"><List size={16} /></button>
@@ -486,7 +483,7 @@ function LearningSpaceSection() {
         </div>
         <div className="learning-space-subject-tabs learning-space-category-cards">
           {categoryTabs.map(function(s) {
-            var count = s === "鍏ㄩ儴" ? allFetched.length : allFetched.filter(function(v) { return v.subject === s; }).length;
+            var count = s === "全部" ? allFetched.length : allFetched.filter(function(v) { return v.subject === s; }).length;
             return count > 0 ? (
               <button key={s} className={"learning-space-subject-card" + (activeSubject === s ? " active" : "")} onClick={function() { handleSubjectChange(s); }} type="button">
                 <strong>{s}</strong>
@@ -502,7 +499,7 @@ function LearningSpaceSection() {
             {broadSearching ? (
               <div className="card learning-space-search-results-card">
                 <div className="panel-heading">
-                  <h3 className="card-title">{searchKeyword || "鍏ㄧ綉缁撴灉"}</h3>
+                  <h3 className="card-title">{searchKeyword || "全网结果"}</h3>
                   <span className="pill">搜索中</span>
                 </div>
                 <div className="learning-space-loading">
@@ -521,7 +518,7 @@ function LearningSpaceSection() {
             {searchResults.length > 0 ? (
               <div className="card learning-space-search-results-card">
                 <div className="panel-heading">
-                  <h3 className="card-title">{searchKeyword || "鍏ㄧ綉缁撴灉"}</h3>
+                  <h3 className="card-title">{searchKeyword || "全网结果"}</h3>
                   <span className="pill">{searchResults.length} 个视频</span>
                 </div>
                 <div className={"learning-space-grid" + (layout === "list" ? " list-layout" : "")}>
@@ -531,7 +528,7 @@ function LearningSpaceSection() {
             ) : null}
             <div className={"learning-space-grid" + (layout === "list" ? " list-layout" : "")}>
               {visibleVideos.map(function(video) { return <LearningVideoCard key={video.id} video={video} />; })}
-              <button className="learning-space-add-more" onClick={loadMoreVisibleVideos} type="button" aria-label="娣诲姞鏇村瑙嗛">
+              <button className="learning-space-add-more" onClick={loadMoreVisibleVideos} type="button" aria-label="添加更多视频">
                 <span><Plus size={26} /></span>
               </button>
             </div>
