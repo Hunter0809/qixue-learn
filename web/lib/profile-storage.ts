@@ -9,6 +9,9 @@ const HISTORY_KEY = "qixue_learning_history";
 const TASKS_KEY = "qixue_today_tasks";
 const LOGIN_DAYS_KEY = "qixue_login_days";
 const CUSTOM_SCHOOLS_KEY = "qixue_custom_schools";
+const WEAK_POINTS_KEY = "qixue_weak_points";
+const RESOURCE_FEED_KEY = "qixue_resource_feed";
+const REVIEW_PLAN_CACHE_KEY = "qixue_review_plan_cache";
 const ANON_USER = "__anonymous__";
 
 export type SchoolStage = "小学" | "初中" | "高中" | "大学";
@@ -193,6 +196,107 @@ function syncUserProfileToBackend(user: StoredUser) {
   }).catch(() => undefined);
 }
 
+function applyRemoteArchive(owner: string, archive: {
+  profile?: {
+    nickname?: string;
+    avatarUrl?: string;
+    school?: string;
+    grade?: string;
+    region?: string;
+    difficulty?: DifficultyPreference;
+  } | null;
+  learningRecords?: Array<{
+    id: string;
+    ownerKey: string;
+    feature: HomeworkRequest["feature"];
+    title: string;
+    subject: string;
+    input: string;
+    response: HomeworkResponse;
+    createdAt: number;
+    updatedAt: number;
+  }>;
+  weakPoints?: Array<{
+    owner?: string;
+    subject: string;
+    knowledge: string;
+    weight: number;
+    source?: string;
+    updatedAt?: number;
+  }>;
+  reviewPlans?: Array<{
+    subject: string;
+    plan: { planId: string; summary: string; days: Array<{ day: number; title: string; minutes: number; priority: number; knowledge: string[]; resources: string[] }> };
+    updatedAt: number;
+  }>;
+  resources?: Array<{
+    id: string;
+    title: string;
+    type: "lecture" | "exercise" | "diagram" | "analogy";
+    subject?: string;
+    knowledge: string;
+    difficulty: "easy" | "medium" | "hard";
+    summary: string;
+    content?: string;
+  }>;
+}) {
+  if (!available()) return;
+  const users = loadUsers();
+  const existing = users[owner];
+  if (existing && archive.profile) {
+    users[owner] = {
+      ...existing,
+      ...archive.profile,
+      username: existing.username,
+      createdAt: existing.createdAt
+    };
+    saveUsers(users);
+  }
+  if (archive.learningRecords) {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(archive.learningRecords));
+  }
+  if (archive.weakPoints) {
+    const weakPoints = archive.weakPoints.map((point) => ({
+      id: `wp_${point.subject}_${point.knowledge}`,
+      subject: point.subject,
+      knowledge: point.knowledge,
+      weight: point.weight,
+      masteryProgress: Math.max(0, 100 - point.weight),
+      lastUpdated: point.updatedAt || Date.now(),
+      history: [{ date: point.updatedAt || Date.now(), correct: false, source: point.source || "backend-archive" }]
+    }));
+    localStorage.setItem(WEAK_POINTS_KEY, JSON.stringify(weakPoints));
+  }
+  if (archive.reviewPlans) {
+    const nextCache = Object.fromEntries(
+      archive.reviewPlans.map((entry) => [
+        entry.subject,
+        {
+          signature: entry.plan.planId,
+          plan: entry.plan,
+          timestamp: entry.updatedAt
+        }
+      ])
+    );
+    localStorage.setItem(REVIEW_PLAN_CACHE_KEY, JSON.stringify(nextCache));
+  }
+  if (archive.resources) {
+    localStorage.setItem(RESOURCE_FEED_KEY, JSON.stringify(archive.resources));
+  }
+}
+
+async function syncUserArchiveFromBackend(owner: string) {
+  if (!available()) return;
+  try {
+    const resp = await fetch(`/api/profile/archive?owner=${encodeURIComponent(owner)}`);
+    if (!resp.ok) return;
+    const archive = await resp.json() as Parameters<typeof applyRemoteArchive>[1];
+    applyRemoteArchive(owner, archive);
+  } catch {
+    return;
+  }
+}
+
 function todayKey(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -331,6 +435,7 @@ export function loginUser(username: string): StoredUser | null {
   localStorage.setItem(CURRENT_USER_KEY, key);
   recordLoginDayForOwner(key);
   syncUserProfileToBackend(user);
+  void syncUserArchiveFromBackend(key);
   return user;
 }
 
@@ -357,6 +462,7 @@ export function registerUser(username: string, profile: {
   users[key] = user;
   saveUsers(users);
   syncUserProfileToBackend(user);
+  void syncUserArchiveFromBackend(key);
   if (available()) {
     localStorage.removeItem(GUEST_KEY);
     localStorage.setItem(CURRENT_USER_KEY, key);

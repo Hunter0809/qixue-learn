@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -14,7 +14,7 @@ import { ResourceCategoryCard, groupResourcesBySubject } from "@/components/reso
 import { buildProfileFromActualData, streakMotto } from "@/lib/learning-analytics";
 import { LearningVideoCard, type VideoResource } from "@/components/learning-video-card";
 import { loadEducationalVideos } from "@/lib/video-resources";
-import { isGuestSession, loadCurrentUserProfile, logoutUser } from "@/lib/profile-storage";
+import { isGuestSession, loadCurrentUserProfile, loadCurrentUsername, logoutUser } from "@/lib/profile-storage";
 import { createTodayTask, markCurrentLoginDay, updateTodayTask } from "@/lib/profile-storage";
 import { startTracking, getActivityStats } from "@/lib/activity-tracker";
 import { GoalsSection } from "@/components/goals-section";
@@ -30,42 +30,33 @@ function ReviewPlanSection({ weakPoints }: { weakPoints: WeakPoint[] }) {
   const planListRef = useRef<HTMLDivElement>(null);
   const [planPage, setPlanPage] = useState(0);
   const [planPageSize, setPlanPageSize] = useState(3);
-  const subjects = [...new Set(weakPoints.map((w) => w.subject))];
-  const preview = weakPoints.slice(0, 5).map((w) => `${w.subject}: ${w.knowledge}`);
+  const subjects = [...new Set(weakPoints.map((point) => point.subject))];
+  const preview = weakPoints.slice(0, 5).map((point) => `${point.subject}: ${point.knowledge}`);
   const planTotalPages = Math.ceil(subjects.length / planPageSize);
   const pagedSubjects = subjects.slice(planPage * planPageSize, (planPage + 1) * planPageSize);
   const planPlaceholderCount = planPage < planTotalPages - 1 ? Math.max(0, planPageSize - pagedSubjects.length) : 0;
 
   useEffect(() => {
-    const nextPlans: Record<string, PlanResponse | null> = {};
-    const nextLoading: Record<string, boolean> = {};
-    subjects.forEach((subject) => {
-      const subjectPoints = weakPoints.filter((point) => point.subject === subject);
-      nextPlans[subject] = getCachedReviewPlan(subject, subjectPoints);
-      nextLoading[subject] = isGeneratingReviewPlan(subject, subjectPoints);
-    });
-    setPlans(nextPlans);
-    setLoadingSubjects(nextLoading);
-
-    function reloadPlans() {
-      const refreshedPlans: Record<string, PlanResponse | null> = {};
-      const refreshedLoading: Record<string, boolean> = {};
+    const refreshPlans = () => {
+      const nextPlans: Record<string, PlanResponse | null> = {};
+      const nextLoading: Record<string, boolean> = {};
       subjects.forEach((subject) => {
         const subjectPoints = weakPoints.filter((point) => point.subject === subject);
-        refreshedPlans[subject] = getCachedReviewPlan(subject, subjectPoints);
-        refreshedLoading[subject] = isGeneratingReviewPlan(subject, subjectPoints);
+        nextPlans[subject] = getCachedReviewPlan(subject, subjectPoints);
+        nextLoading[subject] = isGeneratingReviewPlan(subject, subjectPoints);
       });
-      setPlans(refreshedPlans);
-      setLoadingSubjects(refreshedLoading);
-    }
-
-    window.addEventListener("qixue:review-plan-generating", reloadPlans);
-    window.addEventListener("qixue:review-plan-ready", reloadPlans);
-    return () => {
-      window.removeEventListener("qixue:review-plan-generating", reloadPlans);
-      window.removeEventListener("qixue:review-plan-ready", reloadPlans);
+      setPlans(nextPlans);
+      setLoadingSubjects(nextLoading);
     };
-  }, [weakPoints]);
+
+    refreshPlans();
+    window.addEventListener("qixue:review-plan-generating", refreshPlans);
+    window.addEventListener("qixue:review-plan-ready", refreshPlans);
+    return () => {
+      window.removeEventListener("qixue:review-plan-generating", refreshPlans);
+      window.removeEventListener("qixue:review-plan-ready", refreshPlans);
+    };
+  }, [weakPoints, subjects]);
 
   useEffect(() => {
     function updatePlanPageSize() {
@@ -76,6 +67,7 @@ function ReviewPlanSection({ weakPoints }: { weakPoints: WeakPoint[] }) {
       setPlanPageSize(nextSize);
       setPlanPage((page) => Math.min(page, Math.max(0, Math.ceil(subjects.length / nextSize) - 1)));
     }
+
     updatePlanPageSize();
     window.addEventListener("resize", updatePlanPageSize);
     return () => window.removeEventListener("resize", updatePlanPageSize);
@@ -98,36 +90,56 @@ function ReviewPlanSection({ weakPoints }: { weakPoints: WeakPoint[] }) {
           </div>
         ) : (
           <>
-          <div className="review-plan-subjects review-plan-subjects-fill" ref={planListRef}>
-            {pagedSubjects.map((subject) => (
-              <div className="review-plan-subject compact-review-plan-subject" key={subject}>
-                <div className="panel-heading">
-                  <h3 className="card-title">{subject}</h3>
-                  <span className="pill">{plans[subject] ? "已生成" : loadingSubjects[subject] ? "生成中" : "等待"}</span>
-                </div>
-                {loadingSubjects[subject] && !plans[subject] ? (
-                  <p className="muted">正在自动生成 {subject} 复习计划...</p>
-                ) : plans[subject] ? (
-                  <div className="review-plan-preview compact-review-plan-preview">
-                    <strong>{plans[subject]?.summary}</strong>
-                    <p>{plans[subject]?.days.slice(0, 2).map((day) => `第${day.day}天 ${day.title}`).join(" / ")}</p>
+            <div className="review-plan-subjects review-plan-subjects-fill" ref={planListRef}>
+              {pagedSubjects.map((subject) => (
+                <div className="review-plan-subject compact-review-plan-subject" key={subject}>
+                  <div className="panel-heading">
+                    <h3 className="card-title">{subject}</h3>
+                    <span className="pill">{plans[subject] ? "已生成" : loadingSubjects[subject] ? "生成中" : "等待"}</span>
                   </div>
-                ) : (
-                  <p className="muted">等待生成 {subject} 复习计划。</p>
-                )}
-              </div>
-            ))}
-            {Array.from({ length: planPlaceholderCount }).map((_, index) => (
-              <div className="review-plan-subject compact-review-plan-subject review-plan-placeholder" key={`plan_placeholder_${index}`} aria-hidden />
-            ))}
-          </div>
-          {planTotalPages > 1 ? (
-            <div className="pagination compact-pagination">
-              <button className="button secondary" disabled={planPage === 0} onClick={(event) => { event.preventDefault(); setPlanPage((page) => page - 1); }} type="button">上一页</button>
-              <span className="muted">{planPage + 1} / {planTotalPages}</span>
-              <button className="button secondary" disabled={planPage >= planTotalPages - 1} onClick={(event) => { event.preventDefault(); setPlanPage((page) => page + 1); }} type="button">下一页</button>
+                  {loadingSubjects[subject] && !plans[subject] ? (
+                    <p className="muted">正在自动生成 {subject} 复习计划...</p>
+                  ) : plans[subject] ? (
+                    <div className="review-plan-preview compact-review-plan-preview">
+                      <strong>{plans[subject]?.summary}</strong>
+                      <p>{plans[subject]?.days.slice(0, 2).map((day) => `第${day.day}天 ${day.title}`).join(" / ")}</p>
+                    </div>
+                  ) : (
+                    <p className="muted">等待生成 {subject} 复习计划。</p>
+                  )}
+                </div>
+              ))}
+              {Array.from({ length: planPlaceholderCount }).map((_, index) => (
+                <div className="review-plan-subject compact-review-plan-subject review-plan-placeholder" key={`plan_placeholder_${index}`} aria-hidden />
+              ))}
             </div>
-          ) : null}
+            {planTotalPages > 1 ? (
+              <div className="pagination compact-pagination">
+                <button
+                  className="button secondary"
+                  disabled={planPage === 0}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    setPlanPage((page) => page - 1);
+                  }}
+                  type="button"
+                >
+                  上一页
+                </button>
+                <span className="muted">{planPage + 1} / {planTotalPages}</span>
+                <button
+                  className="button secondary"
+                  disabled={planPage >= planTotalPages - 1}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    setPlanPage((page) => page + 1);
+                  }}
+                  type="button"
+                >
+                  下一页
+                </button>
+              </div>
+            ) : null}
           </>
         )}
       </Link>
@@ -140,74 +152,68 @@ function ReviewPlanSection({ weakPoints }: { weakPoints: WeakPoint[] }) {
 const INITIAL_VISIBLE_VIDEOS = 50;
 const LOAD_MORE_VIDEOS = 10;
 const VIDEO_TARGET_PER_STAGE = 1000;
+const LEARNING_SPACE_CACHE_KEY = "qixue_learning_space_cache";
+const LEARNING_SPACE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
-const IRRELEVANT_KEYWORDS = /游戏|手游|端游|LOL|王者荣耀|原神|英雄联盟|崩坏|三国杀|吃鸡|永劫|绝地求生|和平精英|第五人格|明日方舟|阴阳师|崩坏星穹|我的世界|迷你世界|摩尔庄园|蛋仔派对|暗区突围|鬼畚|搞笑|娱乐|整活/i;
-const NON_EDUCATIONAL = /直播|带货|市场|投资|理财|股票|培训|养生|美食|旅行|探店|测评|搭配|服装|化妆|美妆|发型|美甲|美食|美容|发型|美发|美体|美胸|美背|美妆|护肤|彩妆|穿搭|时尚|潮流|品牌|好物|开箱|种草|拔草|安利|测评|种草机|好物推荐|好物分享|好物种草|好物安利好物分享|好物推荐|好物安利/i;
+const IRRELEVANT_KEYWORDS = /娓告垙|鎵嬫父|绔父|LOL|鐜嬭€呰崳鑰€|鍘熺|鑻遍泟鑱旂洘|宕╁潖|涓夊浗鏉€|鍚冮浮|姘稿姭|缁濆湴姹傜敓|鍜屽钩绮捐嫳|绗簲浜烘牸|鏄庢棩鏂硅垷|闃撮槼甯坾宕╁潖鏄熺┕|鎴戠殑涓栫晫|杩蜂綘涓栫晫|鎽╁皵搴勫洯|铔嬩粩娲惧|鏆楀尯绐佸洿|楝肩暁|鎼炵瑧|濞变箰|鏁存椿/i;
+const NON_EDUCATIONAL = /鐩存挱|甯﹁揣|甯傚満|鎶曡祫|鐞嗚储|鑲＄エ|鍩硅|鍏荤敓|缇庨|鏃呰|鎺㈠簵|娴嬭瘎|鎼厤|鏈嶈|鍖栧|缇庡|鍙戝瀷|缇庣敳|缇庨|缇庡|鍙戝瀷|缇庡彂|缇庝綋|缇庤兏|缇庤儗|缇庡|鎶よ偆|褰╁|绌挎惌|鏃跺皻|娼祦|鍝佺墝|濂界墿|寮€绠眧绉嶈崏|鎷旇崏|瀹夊埄|娴嬭瘎|绉嶈崏鏈簗濂界墿鎺ㄨ崘|濂界墿鍒嗕韩|濂界墿绉嶈崏|濂界墿瀹夊埄濂界墿鍒嗕韩|濂界墿鎺ㄨ崘|濂界墿瀹夊埄/i;
 
-function educationStageFromGrade(grade?: string): "小学" | "初中" | "高中" | "大学" {
-  if (!grade) return "高中";
-  if (grade.includes("小学")) return "小学";
-  if (grade.includes("初")) return "初中";
-  if (grade.includes("高")) return "高中";
-  if (grade.includes("大学") || grade.includes("研究生")) return "大学";
-  return "高中";
+function educationStageFromGrade(grade?: string): "灏忓" | "鍒濅腑" | "楂樹腑" | "澶у" {
+  if (!grade) return "楂樹腑";
+  if (grade.includes("灏忓")) return "灏忓";
+  if (grade.includes("鍒濅")) return "鍒濅腑";
+  if (grade.includes("楂樹")) return "楂樹腑";
+  if (grade.includes("澶у") || grade.includes("鐮旂┒")) return "澶у";
+  return "楂樹腑";
 }
 
 function buildSearchKeywords(userProfile: ReturnType<typeof loadCurrentUserProfile>, weakPoints: WeakPoint[]): string[] {
-  var stageSubjectMap: Record<string, string[]> = {
-    "小学": ["小学数学", "小学语文", "小学英语", "小学科学"],
-    "初中": ["初中数学", "初中语文", "初中英语", "初中物理", "初中化学", "初中生物"],
-    "高中": ["高中数学", "高中语文", "高中英语", "高中物理", "高中化学", "高中生物"],
-    "大学": ["高等数学", "线性代数", "信息论与编码", "大学英语", "大学物理", "程序设计", "数据结构", "计算机类", "电子信息类", "机械类", "土木建筑类", "经济管理类", "法学类", "医学类"]
+  const stageSubjectMap: Record<"灏忓" | "鍒濅腑" | "楂樹腑" | "澶у", string[]> = {
+    "灏忓": ["灏忓鏁板", "灏忓璇枃", "灏忓鑻辫", "灏忓绉戝"],
+    "鍒濅腑": ["鍒濅腑鏁板", "鍒濅腑璇枃", "鍒濅腑鑻辫", "鍒濅腑鐗╃悊", "鍒濅腑鍖栧", "鍒濅腑鐢熺墿"],
+    "楂樹腑": ["楂樹腑鏁板", "楂樹腑璇枃", "楂樹腑鑻辫", "楂樹腑鐗╃悊", "楂樹腑鍖栧", "楂樹腑鐢熺墿"],
+    "澶у": ["楂樼瓑鏁板", "绾挎€т唬鏁?", "淇℃伅璁轰笌缂栫爜", "澶у鑻辫", "澶у鐗╃悊", "绋嬪簭璁捐", "鏁版嵁缁撴瀯", "璁＄畻鏈虹被", "鐢靛瓙淇℃伅绫?", "鏈烘绫?", "鍦熸湪寤虹瓚绫?", "缁忔祹绠＄悊绫?", "娉曞绫?", "鍖诲绫?"]
   };
-  var stage = educationStageFromGrade(userProfile?.grade || undefined);
-  var base = stageSubjectMap[stage];
-  if (weakPoints && weakPoints.length > 0) {
-    var sw = weakPoints.slice(0, 5).map(function(wp) { return wp.subject + " " + wp.knowledge; });
+  const stage = educationStageFromGrade(userProfile?.grade || undefined);
+  const base = stageSubjectMap[stage];
+  if (weakPoints.length > 0) {
+    const sw = weakPoints.slice(0, 5).map((wp) => `${wp.subject} ${wp.knowledge}`);
     return sw.concat(base).slice(0, 6);
   }
   return base.slice(0, 4);
 }
 
-var SUBJECT_NAMES = ["全部", "数学", "语文", "英语", "物理", "化学", "生物", "历史", "地理", "政治", "科学", "计算机类", "电子信息类", "机械类", "土木建筑类", "医学类", "经济管理类", "法学类", "外语类", "化学与化工类", "物理学类"];
+const SUBJECT_NAMES = ["全部", "数学", "语文", "英语", "物理", "化学", "生物", "历史", "地理", "政治", "科学", "计算机类", "电子信息类", "机械类", "土木建筑类", "医学类", "经济管理类", "法学类", "外语类", "化工类", "物理学类"];
 
-var SUBJECT_RELATED: Record<string, string[]> = {
-  "数学": ["数学", "公式", "定理", "方程", "函数", "几何", "概率", "统计", "代数", "计算", "三角", "向量", "微积分", "导数", "极限", "数列", "不等式", "解析几何", "圆锥曲线", "矩阵", "线性代数", "高数", "考研数学"],
-  "语文": ["语文", "阅读", "作文", "古诗", "文言文", "诗词", "阅读理解", "写作", "文学", "散文", "小说", "议论文", "记叙文", "说明文", "名著", "背诵", "默写", "高考语文"],
-  "英语": ["英语", "听力", "口语", "阅读", "写作", "语法", "单词", "词汇", "翻译", "四六级", "雅思", "托福", "GRE", "考研英语", "高考英语"],
-  "物理": ["物理", "力学", "电磁学", "光学", "热学", "原子", "牛顿", "能量", "动量", "电路", "磁场", "电场", "波动", "量子", "相对论", "实验"],
-  "化学": ["化学", "有机", "无机", "元素", "化学反应", "分子", "原子", "化学键", "氧化", "还原", "酸碱", "盐", "溶液", "电解", "化学方程式"],
-  "生物": ["生物", "细胞", "基因", "遗传", "DNA", "RNA", "蛋白质", "生态系统", "进化", "光合作用", "呼吸作用", "减数分裂", "有丝分裂", "孟德尔"],
-  "历史": ["历史", "朝代", "战争", "革命", "改革", "经济", "文化", "世界史", "中国史", "近代史", "古代史", "二战", "一战"],
-  "地理": ["地理", "地形", "气候", "地图", "地球", "经纬", "洋流", "季风", "人口", "城市", "农业", "工业", "自然地理", "人文地理"],
-  "政治": ["政治", "马克思主义", "哲学", "经济", "法律", "道德", "政治生活", "文化生活", "唯物论", "辩证法", "认识论"],
-  "科学": ["科学", "实验", "物理", "化学", "生物", "天文", "地理", "探索", "自然"],
-  "计算机类": ["计算机", "编程", "算法", "数据结构", "操作系统", "网络", "数据库", "C语言", "Python", "Java", "编程语言", "软件开发", "前端", "后端", "计算机科学"],
-  "电子信息类": ["电路", "信号", "通信", "电子", "电磁", "模拟", "数字", "嵌入式", "单片机", "电子技术", "集成电路", "射频", "自动控制"],
-  "机械类": ["机械", "力学", "材料", "设计", "制造", "制图", "传动", "机械设计", "工程力学", "材料力学", "理论力学", "液压", "气压", "机械原理"],
-  "土木建筑类": ["土木", "建筑", "结构", "施工", "混凝土", "测量", "岩土", "建筑工程", "土木工程", "建筑设计", "钢结构", "地基", "抗震"],
-  "医学类": ["医学", "解剖", "生理", "病理", "药理", "临床", "诊断", "内科", "外科", "药学", "护理", "医学考研", "中医", "西医"],
-  "经济管理类": ["经济", "管理", "会计", "金融", "市场", "营销", "统计", "财务管理", "工商管理", "经济学", "管理学", "审计", "税务"],
-  "法学类": ["法学", "法律", "宪法", "民法", "刑法", "诉讼", "合同法", "知识产权", "法考", "法律职业资格", "公司法", "经济法"],
-  "外语类": ["外语", "英语", "日语", "法语", "德语", "翻译", "西班牙语", "韩语", "俄语", "口译", "笔译", "CATTI"],
-  "化学与化工类": ["化学", "化工", "反应", "合成", "分析", "物理化学", "有机化学", "仪器分析", "化学工程", "高分子", "材料化学"],
-  "物理学类": ["物理", "量子", "力学", "电磁", "热力学", "光学", "原子", "固体物理", "统计物理", "粒子物理", "凝聚态"],
+const SUBJECT_RELATED: Record<string, string[]> = {
+  "数学": ["数学", "高数", "线性代数", "概率", "微积分", "解析几何", "统计", "代数"],
+  "语文": ["语文", "阅读", "作文", "古诗", "文言文", "写作", "文学", "名著"],
+  "英语": ["英语", "听力", "口语", "语法", "词汇", "翻译", "托福", "雅思", "GRE"],
+  "物理": ["物理", "力学", "电磁学", "光学", "热学", "量子", "电路"],
+  "化学": ["化学", "有机", "无机", "元素", "化学反应", "电解", "酸碱"],
+  "生物": ["生物", "细胞", "基因", "DNA", "RNA", "生态", "进化"],
+  "历史": ["历史", "朝代", "战争", "改革", "世界史", "中国史"],
+  "地理": ["地理", "气候", "地图", "地貌", "人口", "城市", "区域"],
+  "政治": ["政治", "哲学", "法律", "经济", "道德", "时政"],
+  "科学": ["科学", "实验", "自然"],
+  "计算机类": ["计算机", "编程", "算法", "数据结构", "操作系统", "网络", "数据库", "Python", "Java", "C语言"],
+  "电子信息类": ["电路", "信号", "通信", "电子", "射频", "嵌入式", "单片机"],
+  "机械类": ["机械", "力学", "材料", "设计", "制造", "传动", "液压"],
+  "土木建筑类": ["土木", "建筑", "结构", "施工", "混凝土", "钢结构", "地基"],
+  "医学类": ["医学", "解剖", "生理", "病理", "药理", "临床"],
+  "经济管理类": ["经济", "管理", "会计", "金融", "市场", "营销", "统计"],
+  "法学类": ["法学", "法律", "民法", "刑法", "诉讼", "合同", "知识产权"],
+  "外语类": ["外语", "英语", "日语", "法语", "德语", "口译", "笔译"],
+  "化工类": ["化工", "化学工程", "材料", "分离", "反应工程"],
+  "物理学类": ["物理", "力学", "电磁", "热力学", "光学", "量子"]
 };
 
 function isVideoSubjectRelevant(title: string, description: string, subject: string): boolean {
   if (subject === "全部") return true;
-  var related = SUBJECT_RELATED[subject];
+  const related = SUBJECT_RELATED[subject];
   if (!related) return true;
-  var text = (title + " " + (description || "")).toLowerCase();
-  var hasSubjectWord = related.some(function(kw) { return text.includes(kw.toLowerCase()); });
-  if (!hasSubjectWord) return false;
-  var OTHER_SUBJECTS: string[] = [];
-  Object.keys(SUBJECT_RELATED).forEach(function(s) {
-    if (s !== subject && s !== "科学") OTHER_SUBJECTS = OTHER_SUBJECTS.concat(SUBJECT_RELATED[s]);
-  });
-  var otherCount = OTHER_SUBJECTS.filter(function(kw) { return text.includes(kw.toLowerCase()); }).length;
-  var subjectCount = related.filter(function(kw) { return text.includes(kw.toLowerCase()); }).length;
-  return subjectCount > otherCount;
+  const text = `${title} ${description || ""}`.toLowerCase();
+  return related.some((kw) => text.includes(kw.toLowerCase()));
 }
 
 function importanceStars(weight: number) {
@@ -216,6 +222,39 @@ function importanceStars(weight: number) {
   if (weight >= 45) return 3;
   if (weight >= 25) return 2;
   return 1;
+}
+
+function learningSpaceCacheKey(stage: string) {
+  return `${LEARNING_SPACE_CACHE_KEY}:${loadCurrentUsername() || "guest"}:${stage}`;
+}
+
+function readLearningSpaceCache(stage: string): VideoResource[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(learningSpaceCacheKey(stage));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { timestamp: number; videos: VideoResource[] } | null;
+    if (!parsed || !Array.isArray(parsed.videos)) return null;
+    if (Date.now() - Number(parsed.timestamp || 0) > LEARNING_SPACE_CACHE_TTL_MS) return null;
+    return parsed.videos;
+  } catch {
+    return null;
+  }
+}
+
+function writeLearningSpaceCache(stage: string, videos: VideoResource[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(learningSpaceCacheKey(stage), JSON.stringify({ timestamp: Date.now(), videos }));
+}
+
+function mergeVideoLists(primary: VideoResource[], secondary: VideoResource[]) {
+  const merged = [...primary];
+  secondary.forEach((video) => {
+    if (!merged.some((item) => item.id === video.id || item.url === video.url)) {
+      merged.push(video);
+    }
+  });
+  return merged;
 }
 
 
@@ -239,7 +278,7 @@ function LearningSpaceSection() {
   var totalResults = _total[0], setTotalResults = _total[1];
   var _broadSearching = useState(false);
   var broadSearching = _broadSearching[0], setBroadSearching = _broadSearching[1];
-  var _activeSubject = useState("全部");
+  var _activeSubject = useState("鍏ㄩ儴");
   var activeSubject = _activeSubject[0], setActiveSubject = _activeSubject[1];
   var _allFetched = useState<VideoResource[]>([]);
   var allFetched = _allFetched[0], setAllFetched = _allFetched[1];
@@ -250,10 +289,10 @@ function LearningSpaceSection() {
   var level = stage;
 
   var stageSubjectMap: Record<string, string[]> = {
-    "小学": ["小学数学", "小学语文", "小学英语", "小学科学"],
-    "初中": ["初中数学", "初中语文", "初中英语", "初中物理", "初中化学", "初中生物"],
-    "高中": ["高中数学", "高中语文", "高中英语", "高中物理", "高中化学", "高中生物", "高中历史", "高中地理", "高中政治"],
-    "大学": ["高等数学", "线性代数", "信息论与编码", "大学英语", "大学物理", "程序设计", "数据结构", "计算机类", "电子信息类", "机械类", "土木建筑类", "经济管理类", "法学类", "医学类"]
+    "灏忓": ["灏忓鏁板", "灏忓璇枃", "灏忓鑻辫", "灏忓绉戝"],
+    "鍒濅腑": ["鍒濅腑鏁板", "鍒濅腑璇枃", "鍒濅腑鑻辫", "鍒濅腑鐗╃悊", "鍒濅腑鍖栧", "鍒濅腑鐢熺墿"],
+    "楂樹腑": ["楂樹腑鏁板", "楂樹腑璇枃", "楂樹腑鑻辫", "楂樹腑鐗╃悊", "楂樹腑鍖栧", "楂樹腑鐢熺墿", "楂樹腑鍘嗗彶", "楂樹腑鍦扮悊", "楂樹腑鏀挎不"],
+    "澶у": ["楂樼瓑鏁板", "绾挎€т唬鏁?", "淇℃伅璁轰笌缂栫爜", "澶у鑻辫", "澶у鐗╃悊", "绋嬪簭璁捐", "鏁版嵁缁撴瀯", "璁＄畻鏈虹被", "鐢靛瓙淇℃伅绫?", "鏈烘绫?", "鍦熸湪寤虹瓚绫?", "缁忔祹绠＄悊绫?", "娉曞绫?", "鍖诲绫?"]
   };
 
   async function fetchSubjectVideos(subject: string, maxPages: number, cancelledRef: { v: boolean }, broad?: boolean): Promise<VideoResource[]> {
@@ -264,14 +303,14 @@ function LearningSpaceSection() {
         var resp = await fetch("/api/video-search", {
           method: "POST",
           headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({keyword: subject + " 教学", level, page: pi, pageSize: 50, broad: !!broad})
+          body: JSON.stringify({keyword: subject + " 鏁欏", level, page: pi, pageSize: 50, broad: !!broad})
         });
         var data = await resp.json();
         if (!data.videos || !data.videos.length) break;
         for (var vi = 0; vi < data.videos.length; vi++) {
           var v = data.videos[vi];
           if (IRRELEVANT_KEYWORDS.test(v.title) || IRRELEVANT_KEYWORDS.test(v.description || "")) continue;
-          var mainSubject = subject.replace(/小学|初中|高中|高考|大学|考研/g, "");
+          var mainSubject = subject.replace(/灏忓|鍒濅腑|楂樹腑|楂樿€億澶у|鑰冪爺/g, "");
           if (!isVideoSubjectRelevant(v.title, v.description || "", mainSubject)) continue;
           var exists = results.some(function(r) { return r.url.includes(v.bvid); });
           if (exists) continue;
@@ -293,40 +332,74 @@ function LearningSpaceSection() {
     return results;
   }
 
+  async function ensureSubjectVideos(subject: string, cancelledRef: { v: boolean }): Promise<VideoResource[]> {
+    var results = await fetchSubjectVideos(subject, 12, cancelledRef);
+    if (cancelledRef.v) return results;
+    if (results.length >= INITIAL_VISIBLE_VIDEOS) return results;
+    try {
+      var remote = await loadEducationalVideos();
+      var subjectLower = subject.toLowerCase();
+      var fallbackVideos = remote.filter(function(video) {
+        var text = (video.title + " " + (video.knowledge || "") + " " + (video.subject || "")).toLowerCase();
+        return video.level === level && (video.subject === subject || text.includes(subjectLower));
+      });
+      results = mergeVideoLists(results, fallbackVideos);
+    } catch (_e) {
+      // ignore fallback failures
+    }
+    return results;
+  }
+
   useEffect(function() {
     var cancelledRef = { v: false };
     async function searchAllSubjects() {
       setLoading(true);
+      setSearchResults([]);
       try {
-        var subjects = stageSubjectMap[stage] || stageSubjectMap["高中"];
-        var allResults: VideoResource[] = [];
+        var subjects = stageSubjectMap[stage] || stageSubjectMap["楂樹腑"];
+        var cachedResults = readLearningSpaceCache(stage);
+        var allResults: VideoResource[] = cachedResults ? cachedResults.slice() : [];
+        if (cachedResults && cachedResults.length > 0) {
+          setAllFetched(cachedResults);
+          setVideos(cachedResults);
+          setTotalResults(cachedResults.length);
+          setSearchKeyword(stage + " 瀛︿範瑙嗛");
+          setLoading(false);
+        }
         for (var si = 0; si < subjects.length; si++) {
           var subject = subjects[si];
           if (cancelledRef.v) return;
-          var pageVideos = await fetchSubjectVideos(subject, 5, cancelledRef);
-          for (var vi = 0; vi < pageVideos.length; vi++) {
-            var pv = pageVideos[vi];
-            var exists = allResults.some(function(r) { return r.url.includes(pv.id.replace("bili_", "")); });
-            if (!exists && allResults.length < VIDEO_TARGET_PER_STAGE) allResults.push(pv);
+          var pageVideos = await ensureSubjectVideos(subject, cancelledRef);
+          pageVideos.forEach(function(pv) {
+            if (!allResults.some(function(r) { return r.id === pv.id || r.url === pv.url; }) && allResults.length < VIDEO_TARGET_PER_STAGE) {
+              allResults.push(pv);
+            }
+          });
+          if (!cachedResults) {
+            setAllFetched(allResults.slice());
+            setVideos(allResults.slice());
+            setTotalResults(allResults.length);
+            setSearchKeyword(stage + " 瀛︿範瑙嗛");
           }
           if (allResults.length >= VIDEO_TARGET_PER_STAGE) break;
         }
         if (!cancelledRef.v) {
           if (allResults.length > 0) {
+            writeLearningSpaceCache(stage, allResults);
             setAllFetched(allResults);
             setVideos(allResults);
             setTotalResults(allResults.length);
-            setSearchKeyword(stage + " 学习视频");
+            setSearchKeyword(stage + " 瀛︿範瑙嗛");
           } else {
-            // 使用爬取的数据作为后备
             try {
               var remote = await loadEducationalVideos();
               var fallbackVideos = remote.filter(function(v) { return v.level === level; });
               if (fallbackVideos.length > 0) {
+                writeLearningSpaceCache(stage, fallbackVideos);
                 setAllFetched(fallbackVideos);
                 setVideos(fallbackVideos);
                 setTotalResults(fallbackVideos.length);
-                setSearchKeyword(level + " 精选视频");
+                setSearchKeyword(level + " 绮鹃€夎棰?");
               }
             } catch (_e) { /* ignore */ }
           }
@@ -344,8 +417,8 @@ function LearningSpaceSection() {
     setPage(0);
     setVisibleVideoCount(INITIAL_VISIBLE_VIDEOS);
     setSearchResults([]);
-    setSearchKeyword(stage + " 学习视频");
-    if (subject === "全部") {
+    setSearchKeyword(stage + " 瀛︿範瑙嗛");
+    if (subject === "鍏ㄩ儴") {
       setVideos(allFetched);
     } else {
       setVideos(allFetched.filter(function(v) { return v.subject === subject; }));
@@ -355,20 +428,21 @@ function LearningSpaceSection() {
   async function searchBroadWebResults() {
     if (!videoQuery.trim()) return;
     setBroadSearching(true);
+    setSearchResults([]);
     try {
-      var subjectPrefix = activeSubject === "全部" ? "" : activeSubject;
+      var subjectPrefix = activeSubject === "鍏ㄩ儴" ? "" : activeSubject;
       var searchKeywordText = [subjectPrefix, videoQuery.trim()].filter(Boolean).join(" ");
       var results = await fetchSubjectVideos(searchKeywordText, 20, { v: false }, true);
       setSearchResults(results);
       setPage(0);
       setVisibleVideoCount(INITIAL_VISIBLE_VIDEOS);
-      setSearchKeyword((subjectPrefix ? subjectPrefix + " " : "") + videoQuery.trim() + " 全网结果");
+      setSearchKeyword((subjectPrefix ? subjectPrefix + " " : "") + videoQuery.trim() + " 鍏ㄧ綉缁撴灉");
     } finally {
       setBroadSearching(false);
     }
   }
 
-  var categoryTabs = ["全部"].concat(
+  var categoryTabs = ["鍏ㄩ儴"].concat(
     Array.from(new Set(allFetched.map(function(video) { return video.subject; })))
   );
 
@@ -386,21 +460,16 @@ function LearningSpaceSection() {
     var nextCount = visibleVideoCount + LOAD_MORE_VIDEOS;
     setVisibleVideoCount(nextCount);
     if (filteredVideos.length >= nextCount) return;
-    var targetSubject = activeSubject === "全部" ? (stageSubjectMap[stage] || stageSubjectMap["高中"])[0] : activeSubject;
+    var targetSubject = activeSubject === "鍏ㄩ儴" ? (stageSubjectMap[stage] || stageSubjectMap["楂樹腑"])[0] : activeSubject;
     var more = await fetchSubjectVideos(targetSubject, Math.ceil(nextCount / 50) + 1, { v: false }, true);
     setAllFetched(function(prev) {
-      var merged = prev.slice();
-      more.forEach(function(video) {
-        if (!merged.some(function(item) { return item.id === video.id || item.url === video.url; })) merged.push(video);
-      });
+      var merged = mergeVideoLists(prev, more);
+      writeLearningSpaceCache(stage, merged);
       return merged;
     });
     setVideos(function(prev) {
-      var merged = prev.slice();
-      more.forEach(function(video) {
-        if (!merged.some(function(item) { return item.id === video.id || item.url === video.url; })) merged.push(video);
-      });
-      return activeSubject === "全部" ? merged : merged.filter(function(video) { return video.subject === activeSubject; });
+      var merged = mergeVideoLists(prev, more);
+      return activeSubject === "鍏ㄩ儴" ? merged : merged.filter(function(video) { return video.subject === activeSubject; });
     });
   }
 
@@ -408,7 +477,7 @@ function LearningSpaceSection() {
     <section className="section">
       <div className="card learning-space-card">
         <div className="panel-heading">
-          <h2 className="card-title">{"学习空间"} · {activeSubject}</h2>
+          <h2 className="card-title">{"瀛︿範绌洪棿"} 路 {activeSubject}</h2>
           <div className="learning-space-controls">
             <button className={"icon-button secondary" + (layout === "grid" ? " active" : "")} style={{"minWidth": 32, "minHeight": 32, "padding": 0}} onClick={function() { setPage(0); setLayout("grid"); }} type="button"><LayoutGrid size={16} /></button>
             <button className={"icon-button secondary" + (layout === "list" ? " active" : "")} style={{"minWidth": 32, "minHeight": 32, "padding": 0}} onClick={function() { setPage(0); setLayout("list"); }} type="button"><List size={16} /></button>
@@ -417,7 +486,7 @@ function LearningSpaceSection() {
         </div>
         <div className="learning-space-subject-tabs learning-space-category-cards">
           {categoryTabs.map(function(s) {
-            var count = s === "全部" ? allFetched.length : allFetched.filter(function(v) { return v.subject === s; }).length;
+            var count = s === "鍏ㄩ儴" ? allFetched.length : allFetched.filter(function(v) { return v.subject === s; }).length;
             return count > 0 ? (
               <button key={s} className={"learning-space-subject-card" + (activeSubject === s ? " active" : "")} onClick={function() { handleSubjectChange(s); }} type="button">
                 <strong>{s}</strong>
@@ -430,18 +499,29 @@ function LearningSpaceSection() {
           <div className="learning-space-loading"><Loader2 className="spin" size={24} /> <span className="muted" style={{"marginLeft": 8}}>{"搜索学习视频中..."}</span></div>
         ) : (
           <>
-            {filteredVideos.length === 0 && videoQuery.trim() ? (
+            {broadSearching ? (
+              <div className="card learning-space-search-results-card">
+                <div className="panel-heading">
+                  <h3 className="card-title">{searchKeyword || "鍏ㄧ綉缁撴灉"}</h3>
+                  <span className="pill">搜索中</span>
+                </div>
+                <div className="learning-space-loading">
+                  <Loader2 className="spin" size={24} />
+                  <span className="muted" style={{"marginLeft": 8}}>{"正在搜索..."}</span>
+                </div>
+              </div>
+            ) : filteredVideos.length === 0 && videoQuery.trim() ? (
               <div className="inline-panel learning-space-empty-search">
                 <span className="muted">当前分类没有匹配结果。</span>
                 <button className="button secondary" disabled={broadSearching} onClick={searchBroadWebResults} type="button">
-                  {broadSearching ? "搜全网中" : "搜全网结果"}
+                  {"搜全网结果"}
                 </button>
               </div>
             ) : null}
             {searchResults.length > 0 ? (
               <div className="card learning-space-search-results-card">
                 <div className="panel-heading">
-                  <h3 className="card-title">{searchKeyword || "全网结果"}</h3>
+                  <h3 className="card-title">{searchKeyword || "鍏ㄧ綉缁撴灉"}</h3>
                   <span className="pill">{searchResults.length} 个视频</span>
                 </div>
                 <div className={"learning-space-grid" + (layout === "list" ? " list-layout" : "")}>
@@ -451,7 +531,7 @@ function LearningSpaceSection() {
             ) : null}
             <div className={"learning-space-grid" + (layout === "list" ? " list-layout" : "")}>
               {visibleVideos.map(function(video) { return <LearningVideoCard key={video.id} video={video} />; })}
-              <button className="learning-space-add-more" onClick={loadMoreVisibleVideos} type="button" aria-label="添加更多视频">
+              <button className="learning-space-add-more" onClick={loadMoreVisibleVideos} type="button" aria-label="娣诲姞鏇村瑙嗛">
                 <span><Plus size={26} /></span>
               </button>
             </div>
@@ -593,7 +673,7 @@ export default function HomePage() {
     const x = event ? event.clientX : window.innerWidth / 2;
     const y = event ? event.clientY : window.innerHeight / 2;
     setConfirmAction({
-      message: `删除薄弱点“${point.subject} ${point.knowledge}”？`,
+      message: `鍒犻櫎钖勫急鐐光€?{point.subject} ${point.knowledge}鈥濓紵`,
       x, y,
       onConfirm: () => {
         deleteWeakPoint(point);
@@ -607,7 +687,7 @@ export default function HomePage() {
     const x = event ? event.clientX : window.innerWidth / 2;
     const y = event ? event.clientY : window.innerHeight / 2;
     setConfirmAction({
-      message: "删除该个性化资源？",
+      message: "删除这个个性化资源？",
       x, y,
       onConfirm: () => {
         deleteResource(resourceId);
@@ -677,8 +757,8 @@ export default function HomePage() {
       <section className="section grid two insight-grid">
         <div className="card insight-panel">
           <div className="panel-heading">
-            <h2 className="card-title">薄弱知识点 <span className="pill">{weakPoints.filter((wp) => wp.weight > 0).length} 个</span></h2>
-            
+            <h2 className="card-title">薄弱知识点</h2>
+            <span className="pill">{weakPoints.filter((wp) => wp.weight > 0).length} 个</span>
           </div>
           <div className="list weak-point-list-fill" ref={weakListRef}>
             {pagedWeakPoints
@@ -687,12 +767,12 @@ export default function HomePage() {
                   className="weak-point-row weak-point-line"
                   key={`${wp.id}:${wp.subject}:${wp.knowledge}`}
                   onContextMenu={(event) => { event.preventDefault(); removeWeakPoint(wp, event); }}
-                  title="右键删除该薄弱点"
+                  title="鍙抽敭鍒犻櫎璇ヨ杽寮辩偣"
                 >
                   <div className="weak-point-info">
                     <span className="pill weak-subject-pill">{wp.subject}</span>
                     <strong className="weak-knowledge-name">{wp.knowledge}</strong>
-                    <span className="weak-star-rating" title={`重要程度 ${importanceStars(wp.weight)} 星`}>
+                  <span className="weak-star-rating" title={`重要程度 ${importanceStars(wp.weight)} 星`}>
                       {Array.from({ length: importanceStars(wp.weight) }).map((_, starIndex) => (
                         <Star key={starIndex} size={14} fill="#e6a817" color="#e6a817" />
                       ))}
@@ -709,7 +789,7 @@ export default function HomePage() {
             {Array.from({ length: weakPlaceholderCount }).map((_, index) => (
               <div className="weak-point-row weak-point-line weak-point-placeholder" key={`weak_placeholder_${index}`} aria-hidden />
             ))}
-            {weakPoints.filter((wp) => wp.weight > 0).length === 0 ? <p className="muted">暂无薄弱点记录</p> : null}
+            {weakPoints.filter((wp) => wp.weight > 0).length === 0 ? <p className="muted">暂无薄弱点记录。</p> : null}
           </div>
           {weakTotalPages > 1 ? (
             <div className="pagination compact-pagination">
@@ -720,7 +800,7 @@ export default function HomePage() {
           ) : null}
         </div>
         <div className="card insight-panel resource-insight-panel">
-          <h2 className="card-title">推荐资源 <span className="pill">{canUsePersonalizedResources ? recommendedResourceCategories.length : 0} 个类别</span></h2>
+          <h2 className="card-title">推荐资源 <span className="pill">{canUsePersonalizedResources ? recommendedResourceCategories.length : 0} 类</span></h2>
           {canUsePersonalizedResources ? (
             <div className="list resource-list-fill" ref={resourceListRef}>
               {pagedRecommendedResourceCategories.map((category) => (
@@ -733,7 +813,7 @@ export default function HomePage() {
           ) : (
             <div className="personalized-resource-notice compact-resource-notice">
               <div>
-                <strong>登录 / 注册后查看个性化资源</strong>
+                <strong>登录后查看个性化资源</strong>
                 <p className="muted">游客或未登录状态仅可查看已有薄弱点，不会生成新的薄弱点或个性化资源。</p>
               </div>
               <button className="button" onClick={() => { logoutUser(); setResourceLoginOpen(true); }} type="button">登录 / 注册</button>
@@ -755,7 +835,7 @@ export default function HomePage() {
       {taskEditorOpen ? (
         <div className="modal-backdrop" onClick={() => { setEditing(null); setDraft(emptyDraft); setTaskEditorOpen(false); }}>
           <section className="modal-panel task-modal" onClick={(event) => event.stopPropagation()}>
-            <button className="icon-button secondary modal-close" onClick={() => { setEditing(null); setDraft(emptyDraft); setTaskEditorOpen(false); }} type="button" aria-label="关闭">
+            <button className="icon-button secondary modal-close" onClick={() => { setEditing(null); setDraft(emptyDraft); setTaskEditorOpen(false); }} type="button" aria-label="鍏抽棴">
               <X size={16} />
             </button>
             <h2 className="card-title">{editing ? "编辑任务" : "新建任务"}</h2>
@@ -795,3 +875,4 @@ export default function HomePage() {
     </>
   );
 }
+

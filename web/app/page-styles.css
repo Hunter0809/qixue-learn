@@ -2564,7 +2564,7 @@
 
 .learning-space-add-more {
   min-height: 180px;
-  border: 1px dashed rgba(37, 99, 235, 0.35);
+  border: 1px dashed rgba(31, 75, 110, 0.35);
   background: transparent;
   border-radius: 8px;
   display: grid;
@@ -2576,14 +2576,14 @@
   width: 58px;
   height: 58px;
   border-radius: 50%;
-  background: #2563eb;
-  color: #f4ead2;
+  background: var(--blue);
+  color: var(--beige);
   display: grid;
   place-items: center;
-  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.22);
+  box-shadow: 0 10px 24px rgba(31, 75, 110, 0.22);
 }
 
 .learning-space-add-more:hover {
-  border-color: rgba(37, 99, 235, 0.65);
-  background: rgba(37, 99, 235, 0.04);
+  border-color: rgba(31, 75, 110, 0.65);
+  background: rgba(31, 75, 110, 0.04);
 }

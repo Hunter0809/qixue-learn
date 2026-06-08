@@ -887,6 +887,54 @@ export async function saveStoredLearningRecord(input: {
   `).run(id, owner, input.request.feature, input.request.subject, input.request.content, JSON.stringify(input.response), now, now);
 }
 
+export async function getStoredLearningRecords(owner: string, limit = 120): Promise<Array<{
+  id: string;
+  ownerKey: string;
+  feature: HomeworkRequest["feature"];
+  title: string;
+  subject: string;
+  input: string;
+  response: HomeworkResponse;
+  createdAt: number;
+  updatedAt: number;
+}>> {
+  const normalizedOwner = owner.trim().toLowerCase() || "__anonymous__";
+  const mapRow = (row: Record<string, string | number>) => {
+    const response = JSON.parse(String(row.response_json)) as HomeworkResponse;
+    return {
+      id: String(row.id),
+      ownerKey: String(row.owner),
+      feature: String(row.feature) as HomeworkRequest["feature"],
+      title: response.title || String(row.feature),
+      subject: String(row.subject),
+      input: String(row.input || ""),
+      response,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at)
+    };
+  };
+
+  if (usePostgres()) {
+    await ensurePgSchema();
+    const rows = await getPg().query(`
+      SELECT id, owner, feature, subject, input, response_json, created_at, updated_at
+      FROM learning_records
+      WHERE owner = $1
+      ORDER BY updated_at DESC
+      LIMIT $2
+    `, [normalizedOwner, limit]) as Array<Record<string, string | number>>;
+    return rows.map(mapRow);
+  }
+  const rows = getDb().prepare(`
+    SELECT id, owner, feature, subject, input, response_json, created_at, updated_at
+    FROM learning_records
+    WHERE owner = ?
+    ORDER BY updated_at DESC
+    LIMIT ?
+  `).all(normalizedOwner, limit) as Array<Record<string, string | number>>;
+  return rows.map(mapRow);
+}
+
 export async function saveStoredReviewPlan(input: {
   owner: string;
   subject: string;
