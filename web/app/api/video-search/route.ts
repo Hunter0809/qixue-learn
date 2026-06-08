@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+﻿import { readFileSync } from "node:fs";
 import path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { getStoredLearningVideos, saveStoredLearningVideos } from "@/lib/server-db";
@@ -41,27 +41,11 @@ type CrawledVideo = {
 };
 
 const CRAWLED_VIDEO_PATH = path.join(process.cwd(), "public", "data", "educational-videos.json");
-const SUBJECTS = ["数学", "语文", "英语", "物理", "化学", "生物", "历史", "地理", "政治", "科学", "计算机类", "电子信息类", "机械类", "土木建筑类", "医学类", "经济管理类", "法学类"];
-const UNIVERSITY_SUBJECTS = new Set(["计算机类", "电子信息类", "机械类", "土木建筑类", "医学类", "经济管理类", "法学类"]);
-const BLOCKED_KEYWORDS = /直播|带货|投资|理财|股票|养生|美食|旅行|探店|测评|服装|化妆|美容|手游|端游|游戏|娱乐|明星|网红|MV|演唱|综艺/i;
+const SUBJECTS = ["数学", "语文", "英语", "物理", "化学", "生物", "历史", "地理", "政治", "科学", "高等数学", "线性代数", "信息论与编码", "大学英语", "大学物理", "程序设计", "数据结构", "计算机类", "电子信息类", "机械类", "土木建筑类", "医学类", "经济管理类", "法学类"];
+const UNIVERSITY_SUBJECTS = new Set(["高等数学", "线性代数", "信息论与编码", "大学英语", "大学物理", "程序设计", "数据结构", "计算机类", "电子信息类", "机械类", "土木建筑类", "医学类", "经济管理类", "法学类"]);
+const BLOCKED_KEYWORDS = /鐩存挱|甯﹁揣|鎶曡祫|鐞嗚储|鑲＄エ|鍏荤敓|缇庨|鏃呰|鎺㈠簵|娴嬭瘎|鏈嶈|鍖栧|缇庡|鎵嬫父|绔父|娓告垙|濞变箰|鏄庢槦|缃戠孩|MV|婕斿敱|缁艰壓/i;
 
-const MOJIBAKE_LABELS: Record<string, string> = {
-  "灏忓": "小学",
-  "鍒濅腑": "初中",
-  "楂樹腑": "高中",
-  "澶у": "大学",
-  "鏁板": "数学",
-  "璇枃": "语文",
-  "鑻辫": "英语",
-  "鐗╃悊": "物理",
-  "鍖栧": "化学",
-  "鐢熺墿": "生物",
-  "鍘嗗彶": "历史",
-  "鍦扮悊": "地理",
-  "鏀挎不": "政治",
-  "绉戝": "科学",
-  "璁＄畻鏈虹被": "计算机类"
-};
+const MOJIBAKE_LABELS: Record<string, string> = {};
 
 function cleanTitle(raw: string): string {
   return raw
@@ -95,11 +79,10 @@ function extractLevelFromKeyword(keyword: string): string {
   if (normalized.includes("小学")) return "小学";
   if (normalized.includes("初中") || normalized.includes("中考")) return "初中";
   if (normalized.includes("高中") || normalized.includes("高考")) return "高中";
-  if (normalized.includes("大学") || normalized.includes("高等") || normalized.includes("考研")) return "大学";
+  if (normalized.includes("大学") || normalized.includes("高等数学") || normalized.includes("线性代数") || normalized.includes("信息论与编码") || normalized.includes("程序设计") || normalized.includes("数据结构")) return "大学";
   const subject = extractSubjectFromKeyword(normalized);
   return UNIVERSITY_SUBJECTS.has(subject) ? "大学" : "";
 }
-
 function bvidFromUrl(url: string): string {
   return url.match(/\/video\/(BV[a-zA-Z0-9]+)/)?.[1] || "";
 }
@@ -110,7 +93,7 @@ function tokenize(value: string): string[] {
       .match(/[\u4e00-\u9fa5]{2,}|[a-z0-9]{2,}/gi) || []
   ))
     .map((term) => term.toLowerCase())
-    .filter((term) => term.length >= 2 && !["教学", "课程", "讲解", "视频", "全部"].includes(term));
+    .filter((term) => term.length >= 2 && !["鏁欏", "璇剧▼", "璁茶В", "瑙嗛", "鍏ㄩ儴"].includes(term));
 }
 
 function isStageCompatible(text: string, level: string) {
@@ -118,8 +101,8 @@ function isStageCompatible(text: string, level: string) {
   const normalized = normalizeKeyword(text);
   const hasPrimary = /小学|小升初/.test(normalized);
   const hasMiddle = /初中|中考|初一|初二|初三/.test(normalized);
-  const hasHigh = /高中|高考|高一|高二|高三/.test(normalized);
-  const hasUniversity = /大学|高等数学|高数|考研|线性代数|概率论|离散数学|数据结构|程序设计|计算机/.test(normalized);
+  const hasHigh = /高中|高一|高二|高三|高考/.test(normalized);
+  const hasUniversity = /大学|高等数学|线性代数|信息论与编码|程序设计|数据结构|计算机|电子信息|机械|土木建筑|经济管理|法学|医学/.test(normalized);
 
   if (level === "小学") return !hasMiddle && !hasHigh && !hasUniversity;
   if (level === "初中") return !hasPrimary && !hasHigh && !hasUniversity;
@@ -127,7 +110,6 @@ function isStageCompatible(text: string, level: string) {
   if (level === "大学") return !hasPrimary && !hasMiddle && !hasHigh;
   return true;
 }
-
 async function storedResults(keyword: string, subject: string, level: string, limit: number): Promise<VideoResult[]> {
   return (await getStoredLearningVideos({ keyword, subject, level, limit })).map((item) => ({
     bvid: item.bvid,
@@ -173,7 +155,7 @@ function localCrawledVideos(keyword: string, subject: string, level: string, pag
     .slice(0, pageSize)
     .map(({ item, bvid, itemSubject, itemLevel }) => ({
       bvid,
-      title: item.title || item.knowledge || "学习视频",
+      title: item.title || item.knowledge || "瀛︿範瑙嗛",
       author: item.publisher || "",
       play: item.play || 0,
       duration: item.duration || "",
@@ -206,7 +188,13 @@ function responseFromVideos(videos: VideoResult[], keyword: string, level: strin
 async function searchBilibili(keyword: string, page: number, pageSize: number, broad: boolean, level: string): Promise<VideoResult[]> {
   const normalizedKeyword = normalizeKeyword(keyword);
   const variants = broad
-    ? [normalizedKeyword, `${normalizedKeyword} 教学`, `${normalizedKeyword} 课程`, `${normalizedKeyword} 讲解`, `${normalizedKeyword} 知识点`]
+    ? [
+        normalizedKeyword,
+        `${normalizedKeyword} 教学`,
+        `${normalizedKeyword} 课程`,
+        `${normalizedKeyword} 讲解`,
+        `${normalizedKeyword} 知识点`
+      ]
     : [`${normalizedKeyword} 教学 知识点`];
   const merged = new Map<string, VideoResult>();
 

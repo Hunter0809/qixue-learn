@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Flame, LayoutGrid, List, Loader2, Plus, Search, Star, Target, X } from "lucide-react";
+import { Flame, LayoutGrid, List, Loader2, Plus, Star, Target, X } from "lucide-react";
 import type { PlanResponse, ProfileResponse, TodayTask } from "@/lib/types";
 import { useLearningStore, getWeakPoints, getWeakPointProgress, decayWeakPoints, deleteWeakPoint, type WeakPoint } from "@/lib/store";
 import { preGenerateResources, getCachedResources, deleteResource } from "@/lib/resource-cache";
@@ -157,7 +157,7 @@ function buildSearchKeywords(userProfile: ReturnType<typeof loadCurrentUserProfi
     "小学": ["小学数学", "小学语文", "小学英语", "小学科学"],
     "初中": ["初中数学", "初中语文", "初中英语", "初中物理", "初中化学", "初中生物"],
     "高中": ["高中数学", "高中语文", "高中英语", "高中物理", "高中化学", "高中生物"],
-    "大学": ["大学数学", "大学英语", "大学物理", "程序设计", "计算机类", "经济管理类"]
+    "大学": ["高等数学", "线性代数", "信息论与编码", "大学英语", "大学物理", "程序设计", "数据结构", "计算机类", "电子信息类", "机械类", "土木建筑类", "经济管理类", "法学类", "医学类"]
   };
   var stage = educationStageFromGrade(userProfile?.grade || undefined);
   var base = stageSubjectMap[stage];
@@ -232,6 +232,8 @@ function LearningSpaceSection() {
   var activeSubject = _activeSubject[0], setActiveSubject = _activeSubject[1];
   var _allFetched = useState<VideoResource[]>([]);
   var allFetched = _allFetched[0], setAllFetched = _allFetched[1];
+  var _searchResults = useState<VideoResource[]>([]);
+  var searchResults = _searchResults[0], setSearchResults = _searchResults[1];
   var user = loadCurrentUserProfile();
   var stage = educationStageFromGrade(user?.grade || undefined);
   var level = stage;
@@ -240,7 +242,7 @@ function LearningSpaceSection() {
     "小学": ["小学数学", "小学语文", "小学英语", "小学科学"],
     "初中": ["初中数学", "初中语文", "初中英语", "初中物理", "初中化学", "初中生物"],
     "高中": ["高中数学", "高中语文", "高中英语", "高中物理", "高中化学", "高中生物", "高中历史", "高中地理", "高中政治"],
-    "大学": ["高等数学", "大学英语", "大学物理", "程序设计", "数据结构", "计算机类", "电子信息类", "机械类", "土木建筑类", "经济管理类", "法学类", "医学类"]
+    "大学": ["高等数学", "线性代数", "信息论与编码", "大学英语", "大学物理", "程序设计", "数据结构", "计算机类", "电子信息类", "机械类", "土木建筑类", "经济管理类", "法学类", "医学类"]
   };
 
   async function fetchSubjectVideos(subject: string, maxPages: number, cancelledRef: { v: boolean }, broad?: boolean): Promise<VideoResource[]> {
@@ -290,7 +292,7 @@ function LearningSpaceSection() {
         for (var si = 0; si < subjects.length; si++) {
           var subject = subjects[si];
           if (cancelledRef.v) return;
-          var pageVideos = await fetchSubjectVideos(subject, 3, cancelledRef);
+          var pageVideos = await fetchSubjectVideos(subject, 5, cancelledRef);
           for (var vi = 0; vi < pageVideos.length; vi++) {
             var pv = pageVideos[vi];
             var exists = allResults.some(function(r) { return r.url.includes(pv.id.replace("bili_", "")); });
@@ -329,6 +331,8 @@ function LearningSpaceSection() {
   function handleSubjectChange(subject: string) {
     setActiveSubject(subject);
     setPage(0);
+    setSearchResults([]);
+    setSearchKeyword(stage + " 学习视频");
     if (subject === "全部") {
       setVideos(allFetched);
     } else {
@@ -340,17 +344,12 @@ function LearningSpaceSection() {
     if (!videoQuery.trim()) return;
     setBroadSearching(true);
     try {
-      var results = await fetchSubjectVideos(videoQuery.trim(), 20, { v: false }, true);
-      var merged = allFetched.slice();
-      results.forEach(function(video) {
-        var exists = merged.some(function(item) { return item.id === video.id || item.url === video.url; });
-        if (!exists) merged.push({ ...video, subject: videoQuery.trim() });
-      });
-      setAllFetched(merged);
-      setVideos(results.length ? results : videos);
-      setActiveSubject(videoQuery.trim());
+      var subjectPrefix = activeSubject === "全部" ? "" : activeSubject;
+      var searchKeywordText = [subjectPrefix, videoQuery.trim()].filter(Boolean).join(" ");
+      var results = await fetchSubjectVideos(searchKeywordText, 20, { v: false }, true);
+      setSearchResults(results);
       setPage(0);
-      setSearchKeyword(videoQuery.trim() + " 全网结果");
+      setSearchKeyword((subjectPrefix ? subjectPrefix + " " : "") + videoQuery.trim() + " 全网结果");
     } finally {
       setBroadSearching(false);
     }
@@ -377,7 +376,6 @@ function LearningSpaceSection() {
         <div className="panel-heading">
           <h2 className="card-title">{"学习空间"} · {activeSubject}</h2>
           <div className="learning-space-controls">
-            <span className="pill"><Search size={14} /> {searchKeyword} {" "}{filteredVideos.length} {"个"}</span>
             <button className={"icon-button secondary" + (layout === "grid" ? " active" : "")} style={{"minWidth": 32, "minHeight": 32, "padding": 0}} onClick={function() { setPage(0); setLayout("grid"); }} type="button"><LayoutGrid size={16} /></button>
             <button className={"icon-button secondary" + (layout === "list" ? " active" : "")} style={{"minWidth": 32, "minHeight": 32, "padding": 0}} onClick={function() { setPage(0); setLayout("list"); }} type="button"><List size={16} /></button>
             <input className="input learning-space-search" value={videoQuery} onChange={function(event) { setVideoQuery(event.target.value); setPage(0); }} placeholder="搜索视频标题、发布者或知识点" />
@@ -404,6 +402,17 @@ function LearningSpaceSection() {
                 <button className="button secondary" disabled={broadSearching} onClick={searchBroadWebResults} type="button">
                   {broadSearching ? "搜全网中" : "搜全网结果"}
                 </button>
+              </div>
+            ) : null}
+            {searchResults.length > 0 ? (
+              <div className="card learning-space-search-results-card">
+                <div className="panel-heading">
+                  <h3 className="card-title">{searchKeyword || "全网结果"}</h3>
+                  <span className="pill">{searchResults.length} 个视频</span>
+                </div>
+                <div className={"learning-space-grid" + (layout === "list" ? " list-layout" : "")}>
+                  {searchResults.map(function(video) { return <LearningVideoCard key={video.id} video={video} />; })}
+                </div>
               </div>
             ) : null}
             <div className={"learning-space-grid" + (layout === "list" ? " list-layout" : "")}>
