@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "启学智伴",
+    "slug": "qixue-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "assets/*"
+    ],
+    "android": {
+      "package": "com.qixue.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#f7f1df"
+      }
+    }
+  }
+}
