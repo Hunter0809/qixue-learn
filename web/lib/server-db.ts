@@ -619,10 +619,13 @@ export async function lookupStoredDictionary(raw: string, subject?: string, limi
 }
 
 function profileKey(profile: unknown, owner?: string) {
-  if (owner?.trim()) return owner.trim().toLowerCase();
   if (!profile || typeof profile !== "object") return "";
   const p = profile as { region?: string; school?: string; grade?: string; difficulty?: string };
-  return [p.region, p.school, p.grade, p.difficulty].map((item) => item || "").join("|");
+  const profileParts = [p.region, p.school, p.grade, p.difficulty].map((item) => item || "");
+  const contextKey = profileParts.join("|");
+  const ownerKey = owner?.trim().toLowerCase() || "";
+  if (ownerKey && !contextKey) return ownerKey;
+  return [ownerKey, contextKey].filter(Boolean).join("|");
 }
 
 export async function getStoredResources(knowledge: string, profile?: unknown, owner?: string): Promise<Resource[]> {

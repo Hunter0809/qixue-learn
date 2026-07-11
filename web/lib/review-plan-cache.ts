@@ -1,7 +1,7 @@
 "use client";
 
 import type { PlanResponse } from "@/lib/types";
-import { loadCurrentUsername } from "@/lib/profile-storage";
+import { getLearnerProfile, loadCurrentUsername } from "@/lib/profile-storage";
 import { emitServiceWarning } from "@/lib/client-warning";
 
 const PLAN_CACHE_KEY = "qixue_review_plan_cache";
@@ -195,12 +195,17 @@ function notifyReviewPlanState(subject: string, detail: Record<string, unknown> 
   window.dispatchEvent(new CustomEvent("qixue:review-plan-ready", { detail: { subject, ...detail } }));
 }
 
+function profileSignature() {
+  const profile = getLearnerProfile() || {};
+  return [profile.region || "", profile.school || "", profile.grade || "", profile.difficulty || ""].join("|");
+}
+
 function signatureFor(points: WeakPointLike[]) {
   return points
     .slice()
     .sort((a, b) => a.knowledge.localeCompare(b.knowledge))
     .map((point) => `${point.knowledge}:${Math.round(point.weight)}`)
-    .join("|");
+    .join("|") + `|profile:${profileSignature()}`;
 }
 
 export function getCachedReviewPlan(subject: string, points: WeakPointLike[]): PlanResponse | null {
@@ -223,6 +228,7 @@ export function isGeneratingReviewPlan(subject: string, points?: WeakPointLike[]
 
 export async function preGenerateReviewPlanForSubject(subject: string, points: WeakPointLike[]): Promise<void> {
   const subjectPoints = points.filter((point) => point.subject === subject && point.weight > 0);
+  const profile = getLearnerProfile();
   const signature = signatureFor(subjectPoints);
   if (!subjectPoints.length || getCachedReviewPlan(subject, subjectPoints) || isGeneratingReviewPlan(subject, subjectPoints) || isCoolingDown(subject, signature)) return;
 
@@ -243,7 +249,8 @@ export async function preGenerateReviewPlanForSubject(subject: string, points: W
           .map((point) => `${point.subject} ${point.knowledge}(权重${Math.round(point.weight)})`)
           .join("；"),
         dailyMinutes: 60,
-        style: "practice"
+        style: "practice",
+        profile
       })
     });
     if (!resp.ok) {

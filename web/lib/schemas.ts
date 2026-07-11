@@ -57,7 +57,8 @@ export const planRequestSchema = z.object({
   subject: z.string().min(1),
   goal: z.string().min(6),
   dailyMinutes: z.number().int().min(15).max(240),
-  style: z.enum(["examples", "visual", "practice"])
+  style: z.enum(["examples", "visual", "practice"]),
+  profile: z.object({ nickname: z.string().optional(), school: z.string().optional(), grade: z.string().optional(), region: z.string().optional(), difficulty: z.enum(["基础", "同步", "提高", "竞赛"]).optional() }).optional()
 });
 
 export const planSchema = z.object({

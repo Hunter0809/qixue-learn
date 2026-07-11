@@ -43,6 +43,7 @@ export type PlanRequest = {
   goal: string;
   dailyMinutes: number;
   style: "examples" | "visual" | "practice";
+  profile?: LearnerProfile;
 };
 
 export type PlanDay = {
