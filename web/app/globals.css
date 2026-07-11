@@ -323,6 +323,8 @@ button {
 }
 
 .modal-panel.learner-modal {
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
   width: min(620px, 100%);
 }
 
@@ -842,3 +844,4 @@ button {
 .service-warning-confirm:hover {
   background: #f8e7eb;
 }
+
