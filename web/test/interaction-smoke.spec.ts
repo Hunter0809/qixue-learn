@@ -133,3 +133,48 @@ test.describe("启学智伴全模块真实交互", () => {
     console.log("FULL_INTERACTION_SMOKE_OK");
   });
 });
+
+test("语音转文字驱动智能答疑", async ({ page }) => {
+  const consoleErrors: string[] = [];
+  page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
+  await page.addInitScript(() => {
+    class FakeSpeechRecognition {
+      lang = "";
+      continuous = false;
+      interimResults = false;
+      onstart: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      onend: (() => void) | null = null;
+      onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null = null;
+      start() {
+        this.onstart?.();
+        window.setTimeout(() => {
+          const result = [{ transcript: "函数顶点的语音问题" }] as ArrayLike<{ transcript: string }> & { isFinal?: boolean };
+          result.isFinal = true;
+          this.onresult?.({ results: [result] });
+        }, 20);
+      }
+      stop() { this.onend?.(); }
+    }
+    Object.defineProperty(window, "SpeechRecognition", { configurable: true, value: FakeSpeechRecognition });
+  });
+  await page.goto(`${baseUrl}/login?next=/`, { waitUntil: "domcontentloaded" });
+  await page.getByLabel("用户名").fill(`voice_e2e_${Date.now()}`);
+  await page.getByRole("button", { name: "下一步" }).click();
+  await page.getByRole("textbox", { name: "昵称" }).fill("语音测试用户");
+  await page.getByRole("button", { name: "完成注册" }).click();
+  await page.goto(`${baseUrl}/ai-answer`, { waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "语音录入" }).click();
+  const input = page.locator("textarea").first();
+  await expect(input).toHaveValue("函数顶点的语音问题", { timeout: 10_000 });
+  await page.getByRole("button", { name: "停止录音" }).click();
+  await page.getByRole("button", { name: "开始答疑" }).click();
+  await expect(page.locator(".processing-label")).toHaveCount(0, { timeout: 120_000 });
+  await expect(page.locator(".service-warning-modal")).toHaveCount(0);
+  expect((await page.locator(".feature-output").innerText()).length).toBeGreaterThan(20);
+  for (const title of ["直接结论", "关键概念", "推理依据", "追问方向"]) {
+    const card = page.locator(".feature-output .result-card.filled").filter({ has: page.getByRole("heading", { name: title, exact: true }) });
+    await expect(card, `语音答疑卡片 ${title} 未填充`).toHaveCount(1);
+  }
+  expect(consoleErrors, consoleErrors.join("\\n")).toEqual([]);
+});
