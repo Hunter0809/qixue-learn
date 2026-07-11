@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import Link from "next/link";
+
 import { usePathname } from "next/navigation";
 import { BarChart3, BookOpenCheck, CalendarDays, Camera, Home, Languages, MessageCircleQuestion, Sparkles, Timer } from "lucide-react";
 import clsx from "clsx";
@@ -30,7 +30,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="app-shell">
       <header className="site-header">
-        <Link className="brand" href="/">
+        <a className="brand" href="/">
           <span className="brand-logo">
             <img alt="启学智伴 Logo" src="/logo.png" />
           </span>
@@ -38,16 +38,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             启学智伴
             <small>Agent Learning OS</small>
           </span>
-        </Link>
+        </a>
         <nav className="nav" aria-label="主导航">
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(`${item.href}/`));
             return (
-              <Link className={clsx("nav-link", active && "active")} href={item.href} key={item.href}>
+              <a aria-current={active ? "page" : undefined} className={clsx("nav-link", active && "active")} href={item.href} key={item.href}>
                 <Icon size={18} aria-hidden />
                 <span>{item.label}</span>
-              </Link>
+              </a>
             );
           })}
         </nav>
@@ -61,3 +61,4 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
