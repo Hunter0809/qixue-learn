@@ -7,6 +7,7 @@ import { BarChart3, BookOpenCheck, CalendarDays, Camera, Home, Languages, Messag
 import clsx from "clsx";
 import { UserMenu } from "@/components/user-menu";
 import { useLearningStore } from "@/lib/store";
+import { ServiceWarningModal } from "@/components/status";
 
 const navItems = [
   { href: "/", label: "首页", icon: Home },
@@ -28,7 +29,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="app-shell">
+    <div className="app-shell">`r`n      <ServiceWarningModal />
       <header className="site-header">
         <a className="brand" href="/">
           <span className="brand-logo">
@@ -61,4 +62,5 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
 

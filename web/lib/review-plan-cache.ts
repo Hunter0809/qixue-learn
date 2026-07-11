@@ -2,6 +2,7 @@
 
 import type { PlanResponse } from "@/lib/types";
 import { loadCurrentUsername } from "@/lib/profile-storage";
+import { emitServiceWarning } from "@/lib/client-warning";
 
 const PLAN_CACHE_KEY = "qixue_review_plan_cache";
 const PLAN_GENERATING_KEY = "qixue_review_plan_generating";
@@ -246,6 +247,7 @@ export async function preGenerateReviewPlanForSubject(subject: string, points: W
       })
     });
     if (!resp.ok) {
+      emitServiceWarning("请求链路异常：复习计划服务没有返回有效结果，请稍后重试。");
       markFailed(subject, signature);
       notifyReviewPlanState(subject, { error: await resp.text() });
       return;
@@ -262,6 +264,7 @@ export async function preGenerateReviewPlanForSubject(subject: string, points: W
     clearFailed(subject);
     notifyReviewPlanState(subject, { plan });
   } catch (error) {
+    emitServiceWarning("请求链路异常：复习计划服务无法连接，请检查网络或稍后重试。");
     markFailed(subject, signature);
     notifyReviewPlanState(subject, { error: error instanceof Error ? error.message : "request-failed" });
   } finally {
@@ -278,3 +281,4 @@ export function preGenerateReviewPlans(points: WeakPointLike[]): void {
     void preGenerateReviewPlanForSubject(subject, points);
   });
 }
+

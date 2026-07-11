@@ -17,6 +17,7 @@ import {
   VideoOff
 } from "lucide-react";
 import { postJson } from "@/lib/fetcher";
+import { emitServiceWarning } from "@/lib/client-warning";
 import type { HomeworkFeature, HomeworkRequest, HomeworkResponse } from "@/lib/types";
 import { getFeatureConfig } from "@/lib/feature-config";
 import { getLearnerProfile, loadCurrentUsername, saveLearningHistory } from "@/lib/profile-storage";
@@ -789,6 +790,7 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
         signal
       });
       if (!response.ok || !response.body) {
+        emitServiceWarning("请求链路异常：流式服务没有返回有效结果，请稍后重试。");
         throw new Error("流式生成失败");
       }
       const reader = response.body.getReader();
@@ -802,6 +804,9 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
         if (workspaceFeature === feature) setStreamText(accumulated);
         setStoreState(workspaceFeature, { streamText: accumulated, pendingRequest: request });
       }
+      if (!accumulated.trim()) {
+        emitServiceWarning("请求链路异常：服务连接成功但没有返回内容。");
+      }
       if (finalizeWhenDone && isCurrentRun()) {
         setStoreState(workspaceFeature, {
           isMutating: false,
@@ -810,7 +815,6 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
           imagePreview: request.imageUrl
         });
       }
-      // 从流式回答中提取知识点
       const match = accumulated.match(/\[知识点:\s*([^\]]+)\]/);
       if (match) {
         const isCorrect = isFeatureCorrect(request.feature);
@@ -826,6 +830,7 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
       }
       if (!isCurrentRun()) return;
       const interruptionMessage = "识别或生成过程暂时中断，请检查网络或稍后重试。";
+      emitServiceWarning(`请求链路异常：${interruptionMessage}`);
       if (workspaceFeature === feature) setStreamText((value) => value || interruptionMessage);
       setStoreState(workspaceFeature, {
         streamText: interruptionMessage,
@@ -1068,3 +1073,5 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
     </section>
   );
 }
+
+
