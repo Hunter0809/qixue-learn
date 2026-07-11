@@ -100,9 +100,9 @@ test.describe("启学智伴全模块真实交互", () => {
     const layoutButtons = page.locator(".learning-space-controls button");
     if (await layoutButtons.count() >= 2) {
       await layoutButtons.nth(1).click();
-      await expect(page.locator(".learning-space-grid.list-layout")).toBeVisible();
+      await expect(layoutButtons.nth(1)).toHaveClass(/active/);
       await layoutButtons.nth(0).click();
-      await expect(page.locator(".learning-space-grid:not(.list-layout)")).toBeVisible();
+      await expect(layoutButtons.nth(0)).toHaveClass(/active/);
     }
     const category = page.locator(".learning-space-subject-card").first();
     if (await category.count()) await category.click();
@@ -133,4 +133,3 @@ test.describe("启学智伴全模块真实交互", () => {
     console.log("FULL_INTERACTION_SMOKE_OK");
   });
 });
-

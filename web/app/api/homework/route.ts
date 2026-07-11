@@ -10,6 +10,46 @@ import { logModuleRequest } from "@/lib/server-logger";
 import { persistHomeworkOutcome } from "@/lib/learning-persistence";
 import { z } from "zod";
 
+const featureSectionTitles: Record<string, string[]> = {
+  photo_search: ["题干识别", "答案结论", "推导链路", "同类变式"],
+  ai_answer: ["直接结论", "关键概念", "推理依据", "追问方向"],
+  homework_review: ["批改统计", "逐题反馈", "错因定位", "订正清单"],
+  essay_correction: ["总体评分", "结构诊断", "语句润色", "范例改写"],
+  oral_practice: ["发音表现", "节奏停顿", "表达替换", "跟读任务"],
+  word_lookup: ["释义词性", "词形变化", "例句语境", "易混辨析"],
+  photo_translate: ["原文识别", "译文对照", "语法拆解", "表达替换"],
+  mental_math_check: ["正确率", "错题列表", "速算规律", "强化练习"],
+  document_scan: ["结构提纲", "重点摘要", "待办事项", "归档标签"],
+  recitation: ["分段材料", "抽背题", "记忆提示", "复测安排"],
+  course_recommend: ["目标拆解", "资源排序", "练习路径", "复盘节点"],
+  parent_report: ["学习概况", "风险提醒", "沟通建议", "下周计划"]
+};
+
+function answerSections(answer: string) {
+  const sections: { title: string; items: string[] }[] = [];
+  let current: { title: string; items: string[] } | null = null;
+  answer.replace(/\r\n/g, "\n").split("\n").forEach((line) => {
+    const heading = line.match(/^#{1,3}\s+(.+)$/);
+    if (heading) {
+      if (current) sections.push(current);
+      current = { title: heading[1].replace(/^\d+[.)、]\s*/, "").trim(), items: [] };
+    } else if (current && line.trim()) {
+      current.items.push(line.trim());
+    }
+  });
+  if (current) sections.push(current);
+  return sections.filter((section) => section.items.length);
+}
+
+function normalizeFeatureSections(feature: string, sections: { title: string; items: string[] }[] | undefined, answer: string, fallbackItems: string[][] = []) {
+  const expected = featureSectionTitles[feature];
+  if (!expected) return sections || [];
+  const parsed = answerSections(answer);
+  return expected.map((title, index) => {
+    const source = parsed[index]?.items.length ? parsed[index] : sections?.[index];
+    return { title, items: source?.items?.filter(Boolean) || fallbackItems[index] || [] };
+  });
+}
 const dictionaryExamplesSchema = z.object({
   examples: z.array(z.string()).min(2).max(6)
 });
@@ -239,6 +279,7 @@ export async function POST(request: Request) {
     });
     const value = homeworkResponseSchema.parse({
       ...generated,
+      sections: normalizeFeatureSections(body.feature, generated.sections, generated.answer, [[], [], generated.steps || [], generated.similarPractice?.map((question) => question.stem).filter(Boolean) || []]),
       knowledge: normalizedKnowledge
     });
     await persistHomeworkOutcome(body, value);
