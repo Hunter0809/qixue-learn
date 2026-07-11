@@ -275,10 +275,10 @@ export function addWeakPoint(knowledge: string, subject: string, source: string,
   const catalogPoint =
     canonicalizeKnowledge(parsed.knowledge, parsed.subject, grade) ||
     classifyKnowledgeFromText(parsed.knowledge, parsed.subject, grade)[0];
-  if (!catalogPoint) return;
-  const normalizedSubject = normalizeSubject(catalogPoint.subject);
-  const normalizedKnowledge = catalogPoint.knowledge;
-  if (!isSpecificKnowledgePoint(normalizedKnowledge)) return;
+
+  const normalizedSubject = normalizeSubject(catalogPoint?.subject || parsed.subject);
+  const normalizedKnowledge = catalogPoint?.knowledge || parsed.knowledge;
+  if (!normalizedSubject || !isSpecificKnowledgePoint(normalizedKnowledge)) return;
 
   const points = loadWeakPoints();
   const existing = points.find((p) => p.knowledge === normalizedKnowledge && p.subject === normalizedSubject);
@@ -422,3 +422,4 @@ export function decayWeakPoints() {
   }
   saveWeakPoints(points.filter((point) => point.weight > 0));
 }
+

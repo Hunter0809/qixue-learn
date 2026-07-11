@@ -252,10 +252,10 @@ function applyRemoteArchive(owner: string, archive: {
     };
     saveUsers(users);
   }
-  if (archive.learningRecords) {
+  if (archive.learningRecords?.length) {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(archive.learningRecords));
   }
-  if (archive.weakPoints) {
+  if (archive.weakPoints?.length) {
     const weakPoints = archive.weakPoints.map((point) => ({
       id: `wp_${point.subject}_${point.knowledge}`,
       subject: point.subject,
@@ -267,7 +267,7 @@ function applyRemoteArchive(owner: string, archive: {
     }));
     localStorage.setItem(WEAK_POINTS_KEY, JSON.stringify(weakPoints));
   }
-  if (archive.reviewPlans) {
+  if (archive.reviewPlans?.length) {
     const nextCache = Object.fromEntries(
       archive.reviewPlans.map((entry) => [
         entry.subject,
@@ -280,7 +280,7 @@ function applyRemoteArchive(owner: string, archive: {
     );
     localStorage.setItem(REVIEW_PLAN_CACHE_KEY, JSON.stringify(nextCache));
   }
-  if (archive.resources) {
+  if (archive.resources?.length) {
     localStorage.setItem(RESOURCE_FEED_KEY, JSON.stringify(archive.resources));
   }
 }
@@ -573,3 +573,4 @@ export function deleteLearningHistory(id: string) {
   if (!available()) return;
   localStorage.setItem(HISTORY_KEY, JSON.stringify(loadAllHistory().filter((record) => record.id !== id)));
 }
+

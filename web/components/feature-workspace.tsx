@@ -668,7 +668,7 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
     const runId = streamRunIdRef.current + 1;
     streamRunIdRef.current = runId;
     const startedAt = Date.now();
-    const streamOnly = isStreamOnlyFeature(request.feature);
+    const streamOnly = false;
     if (workspaceFeature === feature) {
       setStreamText("");
       setPendingRequest(request);
@@ -684,7 +684,7 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
       imageUrl: request.imageUrl,
       imagePreview: request.imageUrl
     });
-    if (!(request.feature === "word_lookup" && !request.forceAI)) {
+    if (false) {
       void streamHomework(request, streamOnly, runId, streamController.signal, workspaceFeature).finally(() => window.clearTimeout(streamTimeout));
     } else {
       window.clearTimeout(streamTimeout);
@@ -1073,5 +1073,4 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
     </section>
   );
 }
-
 

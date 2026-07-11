@@ -18,7 +18,7 @@ test.describe("启学智伴全模块真实交互", () => {
       await expect(page.locator("body")).toContainText("启学智伴", { timeout: 30_000 });
     }
 
-    async function expectFeatureResult(label: string) {
+    async function expectFeatureResult(label: string, cardTitles: string[] = []) {
       await expect(page.locator(".processing-label")).toHaveCount(0, { timeout: 120_000 });
       const warning = page.locator(".service-warning-modal");
       if (await warning.count()) {
@@ -26,14 +26,18 @@ test.describe("启学智伴全模块真实交互", () => {
       }
       const output = await page.locator(".feature-output").innerText();
       expect(output.length, `${label} 没有产生可见结果`).toBeGreaterThan(20);
+      for (const title of cardTitles) {
+        const card = page.locator(".feature-output .result-card.filled").filter({ has: page.getByRole("heading", { name: title, exact: true }) });
+        await expect(card, `${label} 卡片 ${title} 未填充`).toHaveCount(1);
+        expect((await card.innerText()).length, `${label} 卡片 ${title} 没有正文`).toBeGreaterThan(title.length + 4);
+      }
     }
-
-    async function submitText(path: string, text: string, button: string) {
+    async function submitText(path: string, text: string, button: string, cardTitles: string[] = []) {
       await open(path);
       const input = page.locator("textarea").first();
       await input.fill(text);
       await page.getByRole("button", { name: button }).click();
-      await expectFeatureResult(path);
+      await expectFeatureResult(path, cardTitles);
     }
 
     await open("/login?next=/");
@@ -54,7 +58,7 @@ test.describe("启学智伴全模块真实交互", () => {
     await page.mouse.move(box.x + Math.min(180, box.width - 12), box.y + Math.min(140, box.height - 12));
     await page.mouse.up();
     await page.getByRole("button", { name: "裁剪并分析" }).click();
-    await expectFeatureResult("拍照搜题");
+    await expectFeatureResult("拍照搜题", ["题干识别", "答案结论", "推导链路", "同类变式"]);
 
     await open("/photo-translate");
     await page.locator('input[type="file"]').setInputFiles(translationImage);
@@ -67,9 +71,9 @@ test.describe("启学智伴全模块真实交互", () => {
     await page.mouse.move(translateBox.x + Math.min(180, translateBox.width - 12), translateBox.y + Math.min(140, translateBox.height - 12));
     await page.mouse.up();
     await page.getByRole("button", { name: "裁剪并分析" }).click();
-    await expectFeatureResult("拍照翻译");
+    await expectFeatureResult("拍照翻译", ["原文识别", "译文对照", "语法拆解", "表达替换"]);
 
-    await submitText("/ai-answer", "为什么二次函数有顶点？", "开始答疑");
+    await submitText("/ai-answer", "为什么二次函数有顶点？", "开始答疑", ["直接结论", "关键概念", "推理依据", "追问方向"]);
 
     await open("/homework");
     await page.getByRole("button", { name: "作文批改" }).click();
@@ -86,10 +90,10 @@ test.describe("启学智伴全模块真实交互", () => {
     await page.getByRole("button", { name: "词典查询" }).click();
     await expect(page.locator('input[placeholder*="单词"]')).toBeVisible();
     await page.locator('input[placeholder*="单词"]').fill("study");
-    await page.getByRole("button", { name: "查询" }).click();
+    await page.getByRole("button", { name: "查询", exact: true }).click();
     await expectFeatureResult("语言工具-词典查询");
     await page.getByRole("button", { name: "拍照翻译" }).click();
-    await expect(page.locator('input[type="file"]')).toBeVisible();
+    await expect(page.locator('input[type="file"]')).toHaveCount(1);
 
     await open("/");
     await expect(page.getByRole("heading", { name: /学习空间/ })).toBeVisible({ timeout: 90_000 });
