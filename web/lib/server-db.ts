@@ -303,6 +303,9 @@ function storedResourceSubject(row: { subject?: string; knowledge: string }) {
 }
 
 function getDb() {
+  if (process.env.VERCEL === "1" && !process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL is required on Vercel for persistent user data.");
+  }
   if (db) return db;
   mkdirSync(DB_DIR, { recursive: true });
   if (!existsSync(DB_PATH) && existsSync(LEGACY_DB_PATH)) {
@@ -740,7 +743,7 @@ export async function getStoredResourceFeed(limit = 80, owner = ""): Promise<Res
     const rows = await getPg().query(`
       SELECT id, title, type, subject, knowledge, difficulty, summary, content
       FROM resources
-      WHERE ($2 = '' OR profile_key = $2 OR profile_key = '')
+      WHERE ($2 = '' OR profile_key = $2 OR profile_key LIKE ($2 || '|%') OR profile_key = '')
       ORDER BY updated_at DESC
       LIMIT $1
     `, [limit, key]) as Array<Record<string, string>>;
@@ -760,7 +763,7 @@ export async function getStoredResourceFeed(limit = 80, owner = ""): Promise<Res
   const rows = getDb().prepare(`
     SELECT id, title, type, subject, knowledge, difficulty, summary, content
     FROM resources
-    WHERE (? = '' OR profile_key = ? OR profile_key = '')
+    WHERE (? = '' OR profile_key = ? OR profile_key LIKE (? || '|%') OR profile_key = '')
     ORDER BY updated_at DESC
     LIMIT ?
   `).all(key, key, limit) as Array<Record<string, string>>;
