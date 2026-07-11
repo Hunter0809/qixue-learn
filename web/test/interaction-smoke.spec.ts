@@ -110,7 +110,8 @@ test.describe("启学智伴全模块真实交互", () => {
     const weakPoint = await page.evaluate(() => {
       const raw = localStorage.getItem("qixue_weak_points");
       const points = raw ? JSON.parse(raw) : [];
-      return points[0] ? { subject: points[0].subject, knowledge: points[0].knowledge } : null;
+      const weak = points.find((point: { weight?: number }) => Number(point.weight || 0) >= 25);
+      return weak ? { subject: weak.subject, knowledge: weak.knowledge } : null;
     });
     expect(weakPoint, "用户交互没有产生薄弱知识点").not.toBeNull();
 

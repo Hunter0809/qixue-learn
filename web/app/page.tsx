@@ -32,6 +32,8 @@ function ReviewPlanSection({ weakPoints }: { weakPoints: WeakPoint[] }) {
   const [planPageSize, setPlanPageSize] = useState(3);
   const subjects = [...new Set(weakPoints.map((point) => point.subject))];
   const preview = weakPoints.slice(0, 5).map((point) => `${point.subject}: ${point.knowledge}`);
+  const subjectsKey = subjects.join("|");
+  const weakPointsKey = weakPoints.map((point) => `${point.subject}:${point.knowledge}:${Math.round(point.weight)}`).join("|");
   const planTotalPages = Math.ceil(subjects.length / planPageSize);
   const pagedSubjects = subjects.slice(planPage * planPageSize, (planPage + 1) * planPageSize);
   const planPlaceholderCount = planPage < planTotalPages - 1 ? Math.max(0, planPageSize - pagedSubjects.length) : 0;
@@ -56,7 +58,7 @@ function ReviewPlanSection({ weakPoints }: { weakPoints: WeakPoint[] }) {
       window.removeEventListener("qixue:review-plan-generating", refreshPlans);
       window.removeEventListener("qixue:review-plan-ready", refreshPlans);
     };
-  }, [weakPoints, subjects]);
+  }, [weakPointsKey, subjectsKey]);
 
   useEffect(() => {
     function updatePlanPageSize() {

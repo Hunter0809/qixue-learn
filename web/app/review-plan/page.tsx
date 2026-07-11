@@ -32,11 +32,11 @@ export default function ReviewPlanPage() {
       setWeakCount(getWeakPoints().length);
     }
 
-    preGenerateReviewPlans(getWeakPoints());
-    refresh();
     window.addEventListener("qixue:review-plan-ready", refresh);
     window.addEventListener("qixue:review-plan-generating", refresh);
     window.addEventListener("qixue:weak-point-updated", refresh);
+    refresh();
+    void preGenerateReviewPlans(getWeakPoints()).then(refresh);
     return () => {
       window.removeEventListener("qixue:review-plan-ready", refresh);
       window.removeEventListener("qixue:review-plan-generating", refresh);

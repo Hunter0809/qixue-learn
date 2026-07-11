@@ -282,10 +282,8 @@ export async function preGenerateReviewPlanForSubject(subject: string, points: W
   }
 }
 
-export function preGenerateReviewPlans(points: WeakPointLike[]): void {
+export function preGenerateReviewPlans(points: WeakPointLike[]): Promise<void> {
   const subjects = Array.from(new Set(points.filter((point) => point.weight > 0).map((point) => point.subject)));
-  subjects.forEach((subject) => {
-    void preGenerateReviewPlanForSubject(subject, points);
-  });
+  return Promise.all(subjects.map((subject) => preGenerateReviewPlanForSubject(subject, points))).then(() => undefined);
 }
 
