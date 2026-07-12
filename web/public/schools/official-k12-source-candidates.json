@@ -1,0 +1,291 @@
+{
+  "updatedAt": "2026-06-01T02:56:57.453Z",
+  "rule": "Only pages and attachments under configured official provincial education department domains are accepted.",
+  "keywords": [
+    "中小学名单",
+    "中小学名录",
+    "学校名单",
+    "义务教育学校名单",
+    "普通高中学校名单",
+    "中等职业学校名单",
+    "学校名录"
+  ],
+  "departments": [
+    {
+      "province": "北京",
+      "stage": "省级",
+      "name": "北京市教育委员会",
+      "domains": [
+        "jw.beijing.gov.cn"
+      ]
+    },
+    {
+      "province": "天津",
+      "stage": "省级",
+      "name": "天津市教育委员会",
+      "domains": [
+        "jy.tj.gov.cn"
+      ]
+    },
+    {
+      "province": "河北",
+      "stage": "省级",
+      "name": "河北省教育厅",
+      "domains": [
+        "jyt.hebei.gov.cn"
+      ]
+    },
+    {
+      "province": "山西",
+      "stage": "省级",
+      "name": "山西省教育厅",
+      "domains": [
+        "jyt.shanxi.gov.cn"
+      ]
+    },
+    {
+      "province": "内蒙古",
+      "stage": "省级",
+      "name": "内蒙古自治区教育厅",
+      "domains": [
+        "jyt.nmg.gov.cn"
+      ]
+    },
+    {
+      "province": "辽宁",
+      "stage": "省级",
+      "name": "辽宁省教育厅",
+      "domains": [
+        "jyt.ln.gov.cn"
+      ]
+    },
+    {
+      "province": "吉林",
+      "stage": "省级",
+      "name": "吉林省教育厅",
+      "domains": [
+        "jyt.jl.gov.cn"
+      ]
+    },
+    {
+      "province": "黑龙江",
+      "stage": "省级",
+      "name": "黑龙江省教育厅",
+      "domains": [
+        "jyt.hlj.gov.cn"
+      ]
+    },
+    {
+      "province": "上海",
+      "stage": "省级",
+      "name": "上海市教育委员会",
+      "domains": [
+        "edu.sh.gov.cn"
+      ]
+    },
+    {
+      "province": "江苏",
+      "stage": "省级",
+      "name": "江苏省教育厅",
+      "domains": [
+        "jyt.jiangsu.gov.cn"
+      ]
+    },
+    {
+      "province": "浙江",
+      "stage": "省级",
+      "name": "浙江省教育厅",
+      "domains": [
+        "jyt.zj.gov.cn"
+      ]
+    },
+    {
+      "province": "安徽",
+      "stage": "省级",
+      "name": "安徽省教育厅",
+      "domains": [
+        "jyt.ah.gov.cn"
+      ]
+    },
+    {
+      "province": "福建",
+      "stage": "省级",
+      "name": "福建省教育厅",
+      "domains": [
+        "jyt.fujian.gov.cn"
+      ]
+    },
+    {
+      "province": "江西",
+      "stage": "省级",
+      "name": "江西省教育厅",
+      "domains": [
+        "jyt.jiangxi.gov.cn"
+      ]
+    },
+    {
+      "province": "山东",
+      "stage": "省级",
+      "name": "山东省教育厅",
+      "domains": [
+        "edu.shandong.gov.cn"
+      ]
+    },
+    {
+      "province": "河南",
+      "stage": "省级",
+      "name": "河南省教育厅",
+      "domains": [
+        "jyt.henan.gov.cn"
+      ]
+    },
+    {
+      "province": "湖北",
+      "stage": "省级",
+      "name": "湖北省教育厅",
+      "domains": [
+        "jyt.hubei.gov.cn"
+      ]
+    },
+    {
+      "province": "湖南",
+      "stage": "省级",
+      "name": "湖南省教育厅",
+      "domains": [
+        "jyt.hunan.gov.cn"
+      ]
+    },
+    {
+      "province": "广东",
+      "stage": "省级",
+      "name": "广东省教育厅",
+      "domains": [
+        "edu.gd.gov.cn"
+      ]
+    },
+    {
+      "province": "广西",
+      "stage": "省级",
+      "name": "广西壮族自治区教育厅",
+      "domains": [
+        "jyt.gxzf.gov.cn"
+      ]
+    },
+    {
+      "province": "海南",
+      "stage": "省级",
+      "name": "海南省教育厅",
+      "domains": [
+        "edu.hainan.gov.cn"
+      ]
+    },
+    {
+      "province": "重庆",
+      "stage": "省级",
+      "name": "重庆市教育委员会",
+      "domains": [
+        "jw.cq.gov.cn"
+      ]
+    },
+    {
+      "province": "四川",
+      "stage": "省级",
+      "name": "四川省教育厅",
+      "domains": [
+        "edu.sc.gov.cn"
+      ]
+    },
+    {
+      "province": "贵州",
+      "stage": "省级",
+      "name": "贵州省教育厅",
+      "domains": [
+        "jyt.guizhou.gov.cn"
+      ]
+    },
+    {
+      "province": "云南",
+      "stage": "省级",
+      "name": "云南省教育厅",
+      "domains": [
+        "jyt.yn.gov.cn"
+      ]
+    },
+    {
+      "province": "西藏",
+      "stage": "省级",
+      "name": "西藏自治区教育厅",
+      "domains": [
+        "edu.xizang.gov.cn"
+      ]
+    },
+    {
+      "province": "陕西",
+      "stage": "省级",
+      "name": "陕西省教育厅",
+      "domains": [
+        "jyt.shaanxi.gov.cn"
+      ]
+    },
+    {
+      "province": "甘肃",
+      "stage": "省级",
+      "name": "甘肃省教育厅",
+      "domains": [
+        "jyt.gansu.gov.cn"
+      ]
+    },
+    {
+      "province": "青海",
+      "stage": "省级",
+      "name": "青海省教育厅",
+      "domains": [
+        "jyt.qinghai.gov.cn"
+      ]
+    },
+    {
+      "province": "宁夏",
+      "stage": "省级",
+      "name": "宁夏回族自治区教育厅",
+      "domains": [
+        "jyt.nx.gov.cn"
+      ]
+    },
+    {
+      "province": "新疆",
+      "stage": "省级",
+      "name": "新疆维吾尔自治区教育厅",
+      "domains": [
+        "jyt.xinjiang.gov.cn"
+      ]
+    },
+    {
+      "province": "香港",
+      "stage": "特别行政区",
+      "name": "香港教育局",
+      "domains": [
+        "edb.gov.hk",
+        "www.edb.gov.hk"
+      ]
+    },
+    {
+      "province": "澳门",
+      "stage": "特别行政区",
+      "name": "澳门教育及青年发展局",
+      "domains": [
+        "dsede.gov.mo",
+        "www.dsedj.gov.mo"
+      ]
+    },
+    {
+      "province": "台湾",
+      "stage": "省级",
+      "name": "台湾教育主管部门",
+      "domains": [
+        "moe.edu.tw",
+        "www.edu.tw"
+      ]
+    }
+  ],
+  "candidates": []
+}

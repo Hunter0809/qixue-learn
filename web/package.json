@@ -1,0 +1,46 @@
+{
+  "name": "personalized-learning-system",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test:routes": "node scripts/smoke-web-routes.mjs",
+    "test:api": "node scripts/smoke-api-features.mjs",
+    "download:dictionary": "node scripts/download-ecdict.mjs",
+    "download:schools": "node scripts/download-official-schools.mjs",
+    "discover:k12-schools": "node scripts/discover_official_k12_sources.mjs",
+    "test:interaction": "playwright test test/interaction-smoke.spec.ts"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
+    "@types/katex": "^0.16.8",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "clsx": "latest",
+    "html2canvas": "latest",
+    "jspdf": "latest",
+    "katex": "^0.17.0",
+    "lucide-react": "latest",
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "react-katex": "^3.1.0",
+    "recharts": "latest",
+    "swr": "latest",
+    "tesseract.js": "^7.0.0",
+    "typescript": "latest",
+    "xlsx": "^0.18.5",
+    "zod": "latest",
+    "zustand": "latest"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "eslint": "latest",
+    "eslint-config-next": "latest"
+  }
+}
