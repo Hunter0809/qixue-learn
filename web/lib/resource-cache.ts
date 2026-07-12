@@ -1,6 +1,6 @@
 "use client";
 
-import type { Resource } from "@/lib/types";
+import type { Resource, ResourceJobAccepted, ResourceResponse } from "@/lib/types";
 import { emitServiceWarning } from "@/lib/client-warning";
 import { getLearnerProfile, loadCurrentUsername } from "@/lib/profile-storage";
 
@@ -162,6 +162,27 @@ export function deleteResource(resourceId: string) {
   }
 }
 
+export async function waitForResourceJob(jobId: string, owner?: string): Promise<ResourceResponse> {
+  for (let attempt = 0; attempt < 300; attempt += 1) {
+    if (attempt > 0) await new Promise((resolve) => window.setTimeout(resolve, 1000));
+    const response = await fetch(`/api/resource/status?jobId=${encodeURIComponent(jobId)}&owner=${encodeURIComponent(owner || "__anonymous__")}`);
+    const payload = await response.json() as { status?: string; result?: ResourceResponse; error?: string };
+    if (!response.ok) {
+      const message = payload.error || "个性资源后台生成失败";
+      emitServiceWarning(`请求链路异常：${message}，请稍后重试。`);
+      throw new Error(message);
+    }
+    if (payload.status === "completed" && payload.result) return payload.result;
+    if (payload.status === "failed") {
+      const message = payload.error || "个性资源后台生成失败";
+      emitServiceWarning(`请求链路异常：${message}，请稍后重试。`);
+      throw new Error(message);
+    }
+  }
+  const message = "个性资源后台生成超过 5 分钟仍未完成";
+  emitServiceWarning(`请求链路异常：${message}，请稍后重试。`);
+  throw new Error(message);
+}
 export async function preGenerateResources(knowledge: string, subject: string): Promise<void> {
   const requestKnowledge = subject && !knowledge.trim().startsWith(subject)
     ? `${subject} ${knowledge.trim()}`
@@ -181,7 +202,10 @@ export async function preGenerateResources(knowledge: string, subject: string): 
       markFailed(requestKnowledge);
       return;
     }
-    const data = await resp.json();
+    const accepted = await resp.json() as ResourceResponse | ResourceJobAccepted;
+    const data = "jobId" in accepted
+      ? await waitForResourceJob(accepted.jobId, loadCurrentUsername() || "__anonymous__")
+      : accepted;
     if (Array.isArray(data.resources) && data.resources.length > 0) {
       setCachedResources(requestKnowledge, data.resources as Resource[]);
       clearFailed(requestKnowledge);

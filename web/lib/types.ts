@@ -118,6 +118,11 @@ export type ResourceAgentTrace = {
   latencyMs?: number;
 };
 
+export type ResourceJobAccepted = {
+  jobId: string;
+  status: "processing";
+};
+
 export type ResourceResponse = {
   resources: Resource[];
   agents?: ResourceAgentTrace[];

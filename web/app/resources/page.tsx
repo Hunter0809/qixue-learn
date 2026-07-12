@@ -7,8 +7,8 @@ import useSWRMutation from "swr/mutation";
 import { Wand2 } from "lucide-react";
 import { postJson } from "@/lib/fetcher";
 import { useLearningStore } from "@/lib/store";
-import { deleteResource, getResourceFeed, preGenerateResources, setCachedResources } from "@/lib/resource-cache";
-import type { Resource, ResourceRequest, ResourceResponse } from "@/lib/types";
+import { deleteResource, getResourceFeed, preGenerateResources, setCachedResources, waitForResourceJob } from "@/lib/resource-cache";
+import type { Resource, ResourceJobAccepted, ResourceRequest, ResourceResponse } from "@/lib/types";
 import { ErrorBlock } from "@/components/status";
 import {
   ResourceCard,
@@ -45,11 +45,11 @@ function ResourcesContent() {
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const { trigger, data, error, isMutating } = useSWRMutation(
     "/api/resource",
-    (_url: string, { arg }: { arg: ResourceRequest }) => postJson<ResourceResponse, ResourceRequest>("/api/resource", arg)
+    (_url: string, { arg }: { arg: ResourceRequest }) => postJson<ResourceResponse | ResourceJobAccepted, ResourceRequest>("/api/resource", arg)
   );
 
   const PAGE_SIZE = 10;
-  const generatedResources = data?.resources || [];
+  const generatedResources = data && "jobId" in data ? [] : (data?.resources || []);
   const resources = mergeResources(generatedResources, feedResources);
   const resourceCategories = groupResourcesBySubject(resources);
   const categoryResources = selectedCategory
@@ -64,6 +64,19 @@ function ResourcesContent() {
   const pagedItems = visibleItems.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
   const categoryHref = selectedCategory ? `/resources?category=${encodeURIComponent(selectedCategory)}` : "/resources";
 
+  async function resolveResourceResponse(response: ResourceResponse | ResourceJobAccepted) {
+    return "jobId" in response
+      ? waitForResourceJob(response.jobId, loadCurrentUsername() || "__anonymous__")
+      : response;
+  }
+
+  function applyResourceResponse(response: ResourceResponse, request: ResourceRequest) {
+    if (!response.resources.length) return;
+    setAgentTraces(response.agents || []);
+    setCachedResources(request.knowledge, response.resources);
+    setFeedResources(getResourceFeed());
+    setPage(0);
+  }
   useEffect(() => {
     setCanUsePersonalizedResources(Boolean(loadCurrentUserProfile()) && !isGuestSession());
     setFeedResources(getResourceFeed());
@@ -102,7 +115,7 @@ function ResourcesContent() {
       };
       setFilter(next);
       setResourceFilter(next);
-      void trigger({ ...next, owner: loadCurrentUsername() || undefined });
+      void trigger({ ...next, owner: loadCurrentUsername() || undefined }).then(resolveResourceResponse).then((response) => applyResourceResponse(response, next)).catch(() => undefined);
     }
   }, [params]);
 
@@ -111,14 +124,7 @@ function ResourcesContent() {
     if (!canUsePersonalizedResources) return;
     setResourceFilter(filter);
     const request = { ...filter, owner: loadCurrentUsername() || undefined, profile: getLearnerProfile() };
-    void trigger(request).then((response) => {
-      if (response?.resources?.length) {
-        setAgentTraces(response.agents || []);
-        setCachedResources(request.knowledge, response.resources);
-        setFeedResources(getResourceFeed());
-        setPage(0);
-      }
-    });
+    void trigger(request).then(resolveResourceResponse).then((response) => applyResourceResponse(response, request)).catch(() => undefined);
   }
 
   function removeResource(resourceId: string, event?: React.MouseEvent) {
