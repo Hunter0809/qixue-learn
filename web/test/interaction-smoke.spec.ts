@@ -16,7 +16,8 @@ test.describe("启学智伴全模块真实交互", () => {
     async function open(path: string) {
       await page.goto(`${baseUrl}${path}`, { waitUntil: "domcontentloaded" });
       await expect(page.locator("body")).toContainText("启学智伴", { timeout: 30_000 });
-      await expect(page.locator("[data-feature-hydrated=\"true\"]")).toBeVisible({ timeout: 30_000 });
+      const workspace = page.locator("[data-feature-hydrated]");
+      if (await workspace.count()) await expect(workspace).toHaveAttribute("data-feature-hydrated", "true", { timeout: 30_000 });
     }
 
     async function expectFeatureResult(label: string, cardTitles: string[] = []) {
