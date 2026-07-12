@@ -53,6 +53,14 @@ export async function POST(request: Request) {
       grade?: string;
       region?: string;
       difficulty?: string;
+      major?: string;
+      learningGoal?: string;
+      knowledgeBase?: string;
+      cognitiveStyle?: string;
+      errorPreference?: string;
+      learningPreference?: string;
+      historySummary?: string;
+      targetExam?: string;
     };
     const owner = body.owner?.trim();
     if (!owner) throw new Error("Missing profile owner");
@@ -64,6 +72,14 @@ export async function POST(request: Request) {
       grade: body.grade || "",
       region: body.region || "",
       difficulty: body.difficulty as never,
+      major: body.major || "",
+      learningGoal: body.learningGoal || "",
+      knowledgeBase: body.knowledgeBase || "",
+      cognitiveStyle: body.cognitiveStyle || "",
+      errorPreference: body.errorPreference || "",
+      learningPreference: body.learningPreference || "",
+      historySummary: body.historySummary || "",
+      targetExam: body.targetExam || "",
       updatedAt: Date.now()
     });
     return { ok: true };

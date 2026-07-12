@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Camera, LogOut, Pencil, Save, Trash2 } from "lucide-react";
+import { Camera, LogOut, MessageCircle, Pencil, Save, Trash2 } from "lucide-react";
 import { LoginModal } from "@/components/login-modal";
 import { PersonalizedGate } from "@/components/personalized-gate";
 import {
@@ -14,6 +14,7 @@ import {
   getProvinces,
   importCustomSchools,
   loadCurrentUserProfile,
+  loadCurrentUsername,
   loadLearningHistory,
   logoutUser,
   provinceFromRegion,
@@ -24,14 +25,17 @@ import {
   type LearningHistoryRecord,
   type StoredUser
 } from "@/lib/profile-storage";
-import type { DifficultyPreference } from "@/lib/types";
+import type { DifficultyPreference, LearnerProfile } from "@/lib/types";
 import { AvatarCropper } from "@/components/avatar-cropper";
 import { clearSiteData, type SiteDataClearResult } from "@/lib/site-data-clear";
+import { emitServiceWarning } from "@/lib/client-warning";
 import {
   loadOfficialSchoolCatalog,
   officialSchoolsForRegion,
   type OfficialSchoolCatalog
 } from "@/lib/school-catalog";
+
+type ProfileChatMessage = { role: "user" | "assistant"; content: string; dimensions?: string[] };
 
 function AvatarView({ user }: { user: StoredUser | null }) {
   if (!user) return <span>未</span>;
@@ -61,6 +65,9 @@ export default function ProfilePage() {
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [clearingCache, setClearingCache] = useState(false);
   const [cacheClearResult, setCacheClearResult] = useState<SiteDataClearResult | null>(null);
+  const [profileChat, setProfileChat] = useState<ProfileChatMessage[]>([{ role: "assistant", content: "你好，我会根据你的自然语言描述，逐步整理专业、目标、基础、认知风格、易错偏好、学习偏好、学习历史和考试目标。你可以直接告诉我最近在学什么、哪里容易出错，以及想达到什么结果。" }]);
+  const [profileMessage, setProfileMessage] = useState("");
+  const [profileSending, setProfileSending] = useState(false);
   const [officialCatalog, setOfficialCatalog] = useState<OfficialSchoolCatalog | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [schoolOptions, setSchoolOptions] = useState(() => schoolsForRegionAndGrade(draft.region, draft.grade));
@@ -93,6 +100,40 @@ export default function ProfilePage() {
   }
 
   useEffect(() => refresh(), []);
+  async function sendProfileMessage(event: React.FormEvent) {
+    event.preventDefault();
+    const message = profileMessage.trim();
+    if (!message || profileSending) return;
+    const owner = loadCurrentUsername();
+    if (!owner) {
+      setLoginOpen(true);
+      return;
+    }
+    setProfileMessage("");
+    setProfileChat((items) => [...items, { role: "user", content: message }]);
+    setProfileSending(true);
+    try {
+      const response = await fetch("/api/profile/insights", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ owner, message })
+      });
+      const payload = await response.json() as { reply?: string; profile?: LearnerProfile; updatedDimensions?: string[]; missing?: string[]; confidence?: number; error?: string };
+      if (!response.ok || !payload.reply) throw new Error(payload.error || "画像对话没有返回结果");
+      if (payload.profile) {
+        updateCurrentUserProfile(payload.profile);
+        refresh();
+      }
+      const dimensions = payload.updatedDimensions?.length ? `已更新画像维度：${payload.updatedDimensions.join("、")}` : "本轮暂未新增明确维度。";
+      const missing = payload.missing?.length ? `下一步可以继续补充：${payload.missing.join("、")}` : "画像维度已基本齐全，后续会随学习行为继续更新。";
+      setProfileChat((items) => [...items, { role: "assistant", content: `${payload.reply}\n\n${dimensions}\n${missing}`, dimensions: payload.updatedDimensions }]);
+    } catch (error) {
+      emitServiceWarning(error instanceof Error ? error.message : "画像对话链路异常，请稍后重试。");
+    } finally {
+      setProfileSending(false);
+    }
+  }
+
 
   useEffect(() => {
     void loadOfficialSchoolCatalog().then((catalog) => {
@@ -264,6 +305,48 @@ export default function ProfilePage() {
               <button className="button secondary" disabled={!editing || !schoolImport.trim()} onClick={saveImportedSchools} type="button">导入学校</button>
             </div>
           </div>
+        </article>
+
+        <article className="card profile-panel profile-dialog-panel">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">Profile Builder Agent</span>
+              <h2 className="card-title">对话式学习画像</h2>
+            </div>
+            <span className="pill">动态更新</span>
+          </div>
+          <p className="muted">不用填写长表单，直接描述你的专业、目标、学习经历和困难，系统会从对话与真实学习记录中更新画像。</p>
+          <div className="profile-dimension-grid">
+            {[
+              ["专业", user?.major],
+              ["学习目标", user?.learningGoal],
+              ["知识基础", user?.knowledgeBase],
+              ["认知风格", user?.cognitiveStyle],
+              ["易错偏好", user?.errorPreference],
+              ["学习偏好", user?.learningPreference],
+              ["学习历史", user?.historySummary],
+              ["考试目标", user?.targetExam]
+            ].map(([label, value]) => (
+              <div className="profile-dimension-card" key={label}>
+                <span className="muted">{label}</span>
+                <strong>{value || "待对话识别"}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="profile-chat-thread" aria-live="polite">
+            {profileChat.map((item, index) => (
+              <div className={`profile-chat-message profile-chat-${item.role}`} key={`${item.role}-${index}`}>
+                <span className="pill">{item.role === "assistant" ? "画像助手" : "我"}</span>
+                <p>{item.content}</p>
+              </div>
+            ))}
+            {profileSending ? <p className="muted">画像助手正在整理本轮信息...</p> : null}
+          </div>
+          <form className="profile-chat-composer" onSubmit={sendProfileMessage}>
+            <MessageCircle size={18} aria-hidden />
+            <input className="input" value={profileMessage} onChange={(event) => setProfileMessage(event.target.value)} placeholder="例如：我是软件工程专业大二，想准备考研，数据结构总在树和图这里出错" />
+            <button className="button" disabled={profileSending || !profileMessage.trim()} type="submit">{profileSending ? "分析中" : "更新画像"}</button>
+          </form>
         </article>
 
         <article className="card profile-panel profile-history-panel">

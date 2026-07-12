@@ -172,4 +172,12 @@ export type LearnerProfile = {
   grade?: string;
   region?: string;
   difficulty?: DifficultyPreference;
+  major?: string;
+  learningGoal?: string;
+  knowledgeBase?: string;
+  cognitiveStyle?: string;
+  errorPreference?: string;
+  learningPreference?: string;
+  historySummary?: string;
+  targetExam?: string;
 };

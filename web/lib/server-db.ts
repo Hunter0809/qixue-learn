@@ -63,8 +63,24 @@ async function ensurePgSchema() {
         grade TEXT NOT NULL DEFAULT '',
         region TEXT NOT NULL DEFAULT '',
         difficulty TEXT NOT NULL DEFAULT '',
+        major TEXT NOT NULL DEFAULT '',
+        learning_goal TEXT NOT NULL DEFAULT '',
+        knowledge_base TEXT NOT NULL DEFAULT '',
+        cognitive_style TEXT NOT NULL DEFAULT '',
+        error_preference TEXT NOT NULL DEFAULT '',
+        learning_preference TEXT NOT NULL DEFAULT '',
+        history_summary TEXT NOT NULL DEFAULT '',
+        target_exam TEXT NOT NULL DEFAULT '',
         updated_at BIGINT NOT NULL
       )`,
+      "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS major TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS learning_goal TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS knowledge_base TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS cognitive_style TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS error_preference TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS learning_preference TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS history_summary TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS target_exam TEXT NOT NULL DEFAULT ''",
       `CREATE TABLE IF NOT EXISTS learning_records (
         id TEXT PRIMARY KEY,
         owner TEXT NOT NULL,
@@ -347,6 +363,14 @@ function getDb() {
       grade TEXT NOT NULL DEFAULT '',
       region TEXT NOT NULL DEFAULT '',
       difficulty TEXT NOT NULL DEFAULT '',
+      major TEXT NOT NULL DEFAULT '',
+      learning_goal TEXT NOT NULL DEFAULT '',
+      knowledge_base TEXT NOT NULL DEFAULT '',
+      cognitive_style TEXT NOT NULL DEFAULT '',
+      error_preference TEXT NOT NULL DEFAULT '',
+      learning_preference TEXT NOT NULL DEFAULT '',
+      history_summary TEXT NOT NULL DEFAULT '',
+      target_exam TEXT NOT NULL DEFAULT '',
       updated_at INTEGER NOT NULL
     );
 
@@ -435,6 +459,18 @@ function getDb() {
   }
   if (!tableHasColumn(db, "learning_videos", "level")) {
     db.exec("ALTER TABLE learning_videos ADD COLUMN level TEXT NOT NULL DEFAULT ''");
+  }
+  for (const statement of [
+    "ALTER TABLE user_profiles ADD COLUMN major TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE user_profiles ADD COLUMN learning_goal TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE user_profiles ADD COLUMN knowledge_base TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE user_profiles ADD COLUMN cognitive_style TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE user_profiles ADD COLUMN error_preference TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE user_profiles ADD COLUMN learning_preference TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE user_profiles ADD COLUMN history_summary TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE user_profiles ADD COLUMN target_exam TEXT NOT NULL DEFAULT ''"
+  ]) {
+    try { db.exec(statement); } catch { /* Existing column. */ }
   }
   db.exec("CREATE INDEX IF NOT EXISTS idx_resources_subject ON resources (subject)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_learning_videos_subject_level ON learning_videos (subject, level, updated_at)");
@@ -1051,8 +1087,8 @@ export async function saveStoredUserProfile(profile: StoredUserProfile) {
   if (usePostgres()) {
     await ensurePgSchema();
     await getPg().query(`
-      INSERT INTO user_profiles (owner, nickname, avatar_url, school, grade, region, difficulty, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO user_profiles (owner, nickname, avatar_url, school, grade, region, difficulty, major, learning_goal, knowledge_base, cognitive_style, error_preference, learning_preference, history_summary, target_exam, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
       ON CONFLICT(owner) DO UPDATE SET
         nickname = EXCLUDED.nickname,
         avatar_url = EXCLUDED.avatar_url,
@@ -1060,13 +1096,21 @@ export async function saveStoredUserProfile(profile: StoredUserProfile) {
         grade = EXCLUDED.grade,
         region = EXCLUDED.region,
         difficulty = EXCLUDED.difficulty,
+        major = EXCLUDED.major,
+        learning_goal = EXCLUDED.learning_goal,
+        knowledge_base = EXCLUDED.knowledge_base,
+        cognitive_style = EXCLUDED.cognitive_style,
+        error_preference = EXCLUDED.error_preference,
+        learning_preference = EXCLUDED.learning_preference,
+        history_summary = EXCLUDED.history_summary,
+        target_exam = EXCLUDED.target_exam,
         updated_at = EXCLUDED.updated_at
-    `, [profile.owner, profile.nickname || "", profile.avatarUrl || "", profile.school || "", profile.grade || "", profile.region || "", profile.difficulty || "", Date.now()]);
+    `, [profile.owner, profile.nickname || "", profile.avatarUrl || "", profile.school || "", profile.grade || "", profile.region || "", profile.difficulty || "", profile.major || "", profile.learningGoal || "", profile.knowledgeBase || "", profile.cognitiveStyle || "", profile.errorPreference || "", profile.learningPreference || "", profile.historySummary || "", profile.targetExam || "", Date.now()]);
     return;
   }
   getDb().prepare(`
-    INSERT INTO user_profiles (owner, nickname, avatar_url, school, grade, region, difficulty, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO user_profiles (owner, nickname, avatar_url, school, grade, region, difficulty, major, learning_goal, knowledge_base, cognitive_style, error_preference, learning_preference, history_summary, target_exam, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(owner) DO UPDATE SET
       nickname = excluded.nickname,
       avatar_url = excluded.avatar_url,
@@ -1074,6 +1118,14 @@ export async function saveStoredUserProfile(profile: StoredUserProfile) {
       grade = excluded.grade,
       region = excluded.region,
       difficulty = excluded.difficulty,
+      major = excluded.major,
+      learning_goal = excluded.learning_goal,
+      knowledge_base = excluded.knowledge_base,
+      cognitive_style = excluded.cognitive_style,
+      error_preference = excluded.error_preference,
+      learning_preference = excluded.learning_preference,
+      history_summary = excluded.history_summary,
+      target_exam = excluded.target_exam,
       updated_at = excluded.updated_at
   `).run(
     profile.owner,
@@ -1083,6 +1135,14 @@ export async function saveStoredUserProfile(profile: StoredUserProfile) {
     profile.grade || "",
     profile.region || "",
     profile.difficulty || "",
+    profile.major || "",
+    profile.learningGoal || "",
+    profile.knowledgeBase || "",
+    profile.cognitiveStyle || "",
+    profile.errorPreference || "",
+    profile.learningPreference || "",
+    profile.historySummary || "",
+    profile.targetExam || "",
     Date.now()
   );
 }
@@ -1091,7 +1151,7 @@ export async function getStoredUserProfile(owner: string): Promise<StoredUserPro
   if (usePostgres()) {
     await ensurePgSchema();
     const rows = await getPg().query(`
-      SELECT owner, nickname, avatar_url, school, grade, region, difficulty, updated_at
+      SELECT owner, nickname, avatar_url, school, grade, region, difficulty, major, learning_goal, knowledge_base, cognitive_style, error_preference, learning_preference, history_summary, target_exam, updated_at
       FROM user_profiles
       WHERE owner = $1
     `, [owner]) as Array<Record<string, string | number>>;
@@ -1105,11 +1165,19 @@ export async function getStoredUserProfile(owner: string): Promise<StoredUserPro
       grade: String(row.grade || ""),
       region: String(row.region || ""),
       difficulty: String(row.difficulty || "") as StoredUserProfile["difficulty"],
+      major: String(row.major || ""),
+      learningGoal: String(row.learning_goal || ""),
+      knowledgeBase: String(row.knowledge_base || ""),
+      cognitiveStyle: String(row.cognitive_style || ""),
+      errorPreference: String(row.error_preference || ""),
+      learningPreference: String(row.learning_preference || ""),
+      historySummary: String(row.history_summary || ""),
+      targetExam: String(row.target_exam || ""),
       updatedAt: Number(row.updated_at)
     };
   }
   const row = getDb().prepare(`
-    SELECT owner, nickname, avatar_url, school, grade, region, difficulty, updated_at
+    SELECT owner, nickname, avatar_url, school, grade, region, difficulty, major, learning_goal, knowledge_base, cognitive_style, error_preference, learning_preference, history_summary, target_exam, updated_at
     FROM user_profiles
     WHERE owner = ?
   `).get(owner) as Record<string, string | number> | undefined;
@@ -1123,6 +1191,14 @@ export async function getStoredUserProfile(owner: string): Promise<StoredUserPro
     grade: String(row.grade || ""),
     region: String(row.region || ""),
     difficulty: String(row.difficulty || "") as StoredUserProfile["difficulty"],
+    major: String(row.major || ""),
+    learningGoal: String(row.learning_goal || ""),
+    knowledgeBase: String(row.knowledge_base || ""),
+    cognitiveStyle: String(row.cognitive_style || ""),
+    errorPreference: String(row.error_preference || ""),
+    learningPreference: String(row.learning_preference || ""),
+    historySummary: String(row.history_summary || ""),
+    targetExam: String(row.target_exam || ""),
     updatedAt: Number(row.updated_at)
   };
 }

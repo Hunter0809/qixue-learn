@@ -191,7 +191,15 @@ function syncUserProfileToBackend(user: StoredUser) {
       school: user.school,
       grade: user.grade,
       region: user.region,
-      difficulty: user.difficulty
+      difficulty: user.difficulty,
+      major: user.major,
+      learningGoal: user.learningGoal,
+      knowledgeBase: user.knowledgeBase,
+      cognitiveStyle: user.cognitiveStyle,
+      errorPreference: user.errorPreference,
+      learningPreference: user.learningPreference,
+      historySummary: user.historySummary,
+      targetExam: user.targetExam
     })
   }).catch(() => undefined);
 }
@@ -204,6 +212,14 @@ function applyRemoteArchive(owner: string, archive: {
     grade?: string;
     region?: string;
     difficulty?: DifficultyPreference;
+    major?: string;
+    learningGoal?: string;
+    knowledgeBase?: string;
+    cognitiveStyle?: string;
+    errorPreference?: string;
+    learningPreference?: string;
+    historySummary?: string;
+    targetExam?: string;
   } | null;
   learningRecords?: Array<{
     id: string;
@@ -423,7 +439,15 @@ export function getLearnerProfile(): LearnerProfile | undefined {
     school: user.school,
     grade: user.grade,
     region: user.region,
-    difficulty: user.difficulty
+    difficulty: user.difficulty,
+    major: user.major,
+    learningGoal: user.learningGoal,
+    knowledgeBase: user.knowledgeBase,
+    cognitiveStyle: user.cognitiveStyle,
+    errorPreference: user.errorPreference,
+    learningPreference: user.learningPreference,
+    historySummary: user.historySummary,
+    targetExam: user.targetExam
   };
 }
 
@@ -471,7 +495,7 @@ export function registerUser(username: string, profile: {
   return user;
 }
 
-export function updateCurrentUserProfile(patch: Partial<Pick<StoredUser, "nickname" | "avatarUrl" | "school" | "grade" | "region" | "difficulty">>) {
+export function updateCurrentUserProfile(patch: Partial<Pick<StoredUser, "nickname" | "avatarUrl" | "school" | "grade" | "region" | "difficulty" | "major" | "learningGoal" | "knowledgeBase" | "cognitiveStyle" | "errorPreference" | "learningPreference" | "historySummary" | "targetExam">>) {
   const username = loadCurrentUsername();
   if (!username) return null;
   const users = loadUsers();
