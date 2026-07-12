@@ -164,11 +164,17 @@ export type HomeworkRequest = {
   forceAI?: boolean;
 };
 
+export type TutorArtifacts = {
+  diagram: string;
+  videoScript: string;
+  animationStoryboard: string;
+};
 export type HomeworkResponse = {
   feature: HomeworkFeature;
   title: string;
   answer: string;
   sections?: { title: string; items: string[] }[];
+  artifacts?: TutorArtifacts;
   steps: string[];
   knowledge: string[];
   similarPractice: QuizQuestion[];
@@ -192,3 +198,4 @@ export type LearnerProfile = {
   historySummary?: string;
   targetExam?: string;
 };
+

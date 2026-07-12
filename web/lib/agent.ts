@@ -15,7 +15,7 @@ function requireEnv(name: string): string {
 
 function agentTimeoutMs(isVision: boolean) {
   const raw = isVision
-    ? (process.env.AGENT_VISION_TIMEOUT_MS || 60000)
+    ? (process.env.AGENT_VISION_TIMEOUT_MS || 90000)
     : (process.env.AGENT_API_TIMEOUT_MS || 60000);
   const parsed = Number(raw);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 60000;
@@ -43,16 +43,45 @@ export function extractJsonFromText(text: string): string {
   return trimmed;
 }
 
+export function parseAgentJson(text: string): unknown {
+  const extracted = extractJsonFromText(text);
+  try {
+    return JSON.parse(extracted);
+  } catch (firstError) {
+    let repaired = "";
+    for (let index = 0; index < extracted.length; index += 1) {
+      const char = extracted[index];
+      if (char !== "\\") {
+        repaired += char;
+        continue;
+      }
+      const next = extracted[index + 1] || "";
+      const validSimpleEscape = ["\\", "\"", "/", "b", "f", "n", "r", "t"].includes(next);
+      const validUnicodeEscape = next === "u" && /^[0-9a-fA-F]{4}$/.test(extracted.slice(index + 2, index + 6));
+      if (validSimpleEscape || validUnicodeEscape) {
+        repaired += char;
+      } else {
+        repaired += "\\\\";
+      }
+    }
+    try {
+      return JSON.parse(repaired);
+    } catch {
+      throw firstError;
+    }
+  }
+}
 async function requestAgentJson(messages: AgentMessage[], signal?: AbortSignal): Promise<string> {
   const baseUrl = requireEnv("AGENT_API_BASE_URL").replace(/\/$/, "");
   const token = requireEnv("AGENT_API_TOKEN");
   const model = process.env.AGENT_VISION_MODEL || "mimo-v2.5";
+  const maxTokens = Number(process.env.AGENT_VISION_MAX_TOKENS || 6144);
   const requestSignal = createRequestSignal(agentTimeoutMs(true), signal);
   try {
     const response = await fetch(baseUrl + "/chat/completions", {
       method: "POST",
       headers: { authorization: "Bearer " + token, "content-type": "application/json" },
-      body: JSON.stringify({ model, messages, temperature: 0.15, stream: false }),
+      body: JSON.stringify({ model, messages, temperature: 0.15, max_tokens: Number.isFinite(maxTokens) && maxTokens > 0 ? maxTokens : 6144, stream: false }),
       signal: requestSignal.signal
     });
     if (!response.ok) {
@@ -101,7 +130,10 @@ export async function askAgentStreamCollect<T>(
   const fullText = await requestAgentJson(messages, signal);
   if (logModule) await logAgentResponse(logModule, { raw: fullText });
   const extracted = extractJsonFromText(fullText);
-  const parsed = schema.parse(JSON.parse(extracted));
+  const parsed = schema.parse(parseAgentJson(fullText));
   if (logModule) await logAgentResponse(logModule, { parsed });
   return parsed;
 }
+
+
+

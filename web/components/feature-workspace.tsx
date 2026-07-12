@@ -388,6 +388,23 @@ function FeatureResultBody({ data, feature, onFollowUp }: { data: HomeworkRespon
   );
 }
 
+function TutorArtifactCards({ artifacts }: { artifacts?: HomeworkResponse["artifacts"] }) {
+  if (!artifacts) return null;
+  const cards = [
+    { title: "图解说明", content: artifacts.diagram },
+    { title: "短视频讲解脚本", content: artifacts.videoScript },
+    { title: "动画分镜与交互", content: artifacts.animationStoryboard }
+  ];
+  return (
+    <div className="result-sections tutor-artifact-grid">
+      {cards.map((card) => (
+        <ResultCard title={card.title} filled key={card.title}>
+          <MarkdownRenderer text={card.content} boldAsSubheading />
+        </ResultCard>
+      ))}
+    </div>
+  );
+}
 function ResultPanel({
   data,
   mode,
@@ -417,6 +434,7 @@ function ResultPanel({
       </div>
       <div className={`answer-content output-layout output-layout-${feature}`}>
         <FeatureResultBody data={data} feature={feature} onFollowUp={onFollowUp} />
+        <TutorArtifactCards artifacts={data.artifacts} />
       </div>
     </div>
   );
@@ -990,4 +1008,5 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
     </section>
   );
 }
+
 

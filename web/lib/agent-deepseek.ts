@@ -1,5 +1,5 @@
 import { type ZodSchema } from "zod";
-import { extractJsonFromText } from "@/lib/agent";
+import { parseAgentJson } from "@/lib/agent";
 import { logAgentResponse } from "@/lib/server-logger";
 
 const DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1";
@@ -194,8 +194,9 @@ export async function askDeepSeekStreamCollect<T>(
     requestSignal.cleanup();
   }
   if (logModule) await logAgentResponse(logModule, { raw: fullText });
-  const extracted = extractJsonFromText(fullText);
-  const parsed = schema.parse(JSON.parse(extracted));
+
+  const parsed = schema.parse(parseAgentJson(fullText));
   if (logModule) await logAgentResponse(logModule, { parsed });
   return parsed;
 }
+

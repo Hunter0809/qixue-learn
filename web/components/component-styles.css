@@ -606,3 +606,13 @@
   background: rgba(126, 31, 48, 0.08);
   color: #7e1f30;
 }
+
+.tutor-artifact-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 900px) {
+  .tutor-artifact-grid {
+    grid-template-columns: 1fr;
+  }
+}

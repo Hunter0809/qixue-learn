@@ -1,5 +1,5 @@
 import { routeJson } from "@/lib/api-route";
-import { homeworkRequestSchema, homeworkResponseSchema } from "@/lib/schemas";
+import { homeworkRequestSchema, homeworkResponseSchema, homeworkTutorResponseSchema } from "@/lib/schemas";
 import { askAgentStreamCollect } from "@/lib/agent";
 import { askDeepSeekStreamCollect } from "@/lib/agent-deepseek";
 import { runHomeworkAlgorithm } from "@/lib/homework-algorithms";
@@ -237,12 +237,18 @@ export async function POST(request: Request) {
     const now = Date.now();
     const cached = key ? await getCachedHomeworkResponse(key, now) : null;
 
-    if (cached) return cached;
+    const requiresTutorArtifacts = body.feature !== "word_lookup" || body.forceAI === true;
+    if (cached) {
+      const cachedResult = requiresTutorArtifacts ? homeworkTutorResponseSchema.safeParse(cached) : homeworkResponseSchema.safeParse(cached);
+      if (cachedResult.success) return cachedResult.data;
+    }
 
     const taskPrompt = [
       "Homework Agent: 根据学生输入生成学习反馈。",
       "除 oral_practice、word_lookup、photo_translate 等语言需求相关板块中的例句、原文、译文、跟读文本外，其他所有自然语言内容必须使用中文。",
-      "必须返回且只返回 JSON 对象，字段为 feature, title, answer, sections, steps, knowledge, similarPractice, nextAction。",
+      "必须返回且只返回 JSON 对象，字段为 feature, title, answer, artifacts, sections, steps, knowledge, similarPractice, nextAction；artifacts 是必填对象，必须包含 diagram、videoScript、animationStoryboard。",
+      "视觉请求必须输出紧凑 JSON，字段顺序优先为 feature,title,answer,artifacts,sections,steps,knowledge,similarPractice,nextAction；answer 不超过 700 字，sections 恰好 2 项且每项最多 2 条，steps 最多 4 条，similarPractice 最多 1 题，knowledge 恰好 3 项。",
+      "artifacts 必须包含 diagram、videoScript、animationStoryboard 三个非空字符串：diagram 是可读的中文图解或 Mermaid/ASCII 结构（不超过 300 字）；videoScript 是 30-60 秒短视频讲解脚本（不超过 400 字）；animationStoryboard 是 3-4 个关键帧、含画面旁白交互提示的动画分镜（不超过 500 字）。三者都必须围绕本次输入，不能写占位符。",
       'answer 字段必须保留清晰换行，可使用 Markdown 小标题和列表；拍照搜题的 answer 至少分为\u201C题目识别\u201D\u201C答案结论\u201D\u201C关键思路\u201D三段，不要把所有内容挤成一整段。',
       "sections 每项包含 title(string), items(string[])。",
       "similarPractice 每项包含 id, type('choice'|'blank'|'coding'|'short'), knowledge, difficulty('easy'|'medium'|'hard'), stem, options 可选。",
@@ -253,11 +259,13 @@ export async function POST(request: Request) {
       "内容必须基于输入文本、算法分析和学习档案，不得编造用户没有提供的学习记录。"
     ].join("\n");
 
-    // 有图片 → MIMO 多模态流式收集；纯文本 → DeepSeek 流式收集
-    const generated = homeworkResponseSchema.parse(
+    // 有图片 → MIMO 多模态流式收集；纯文本 → DeepSeek 流式收集；两条链路统一校验多模态产物
+    const responseSchema = requiresTutorArtifacts ? homeworkTutorResponseSchema : homeworkResponseSchema;
+    const agentContext = body.imageUrl ? { request: { ...body, imageUrl: undefined }, algorithm } : { request: body, algorithm };
+    const generated = responseSchema.parse(
       body.imageUrl
-        ? await askAgentStreamCollect(taskPrompt, homeworkResponseSchema, { request: body, algorithm }, body.imageUrl, logModule, request.signal)
-        : await askDeepSeekStreamCollect(taskPrompt, homeworkResponseSchema, { request: body, algorithm }, logModule, request.signal)
+        ? await askAgentStreamCollect(taskPrompt, responseSchema, agentContext, body.imageUrl, logModule, request.signal)
+        : await askDeepSeekStreamCollect(taskPrompt, responseSchema, agentContext, logModule, request.signal)
     );
     const normalizedKnowledge = ensureThreeKnowledgePoints({
       subject: body.subject,
@@ -268,7 +276,7 @@ export async function POST(request: Request) {
       knowledge: generated.knowledge,
       similarPractice: generated.similarPractice
     });
-    const value = homeworkResponseSchema.parse({
+    const value = responseSchema.parse({
       ...generated,
       sections: normalizeFeatureSections(body.feature, generated.sections, generated.answer, [[], [], generated.steps || [], generated.similarPractice?.map((question) => question.stem).filter(Boolean) || []]),
       knowledge: normalizedKnowledge
@@ -278,3 +286,10 @@ export async function POST(request: Request) {
     return value;
   });
 }
+
+
+
+
+
+
+

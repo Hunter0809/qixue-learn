@@ -199,6 +199,11 @@ export const homeworkRequestSchema = z.object({
   profile: learnerProfileSchema.optional()
 });
 
+export const tutorArtifactsSchema = z.object({
+  diagram: z.string().min(1),
+  videoScript: z.string().min(1),
+  animationStoryboard: z.string().min(1)
+});
 export const homeworkResponseSchema = z.object({
   feature: homeworkRequestSchema.shape.feature,
   title: z.string(),
@@ -207,6 +212,7 @@ export const homeworkResponseSchema = z.object({
     title: z.string(),
     items: z.array(z.string())
   })).optional(),
+  artifacts: tutorArtifactsSchema.optional(),
   steps: z.preprocess((value) => {
     if (typeof value === "string") {
       return value.split(/\r?\n|[；;]/).map((item) => item.trim()).filter(Boolean);
@@ -223,3 +229,8 @@ export const homeworkResponseSchema = z.object({
     return JSON.stringify(value);
   })
 });
+
+export const homeworkTutorResponseSchema = homeworkResponseSchema.extend({ artifacts: tutorArtifactsSchema });
+
+
+
