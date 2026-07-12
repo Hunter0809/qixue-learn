@@ -130,6 +130,10 @@ test.describe("启学智伴全模块真实交互", () => {
     await expect(page.locator(".resource-card-link, .service-warning-modal")).toBeVisible({ timeout: 120_000 });
     if (await page.locator(".service-warning-modal").count()) throw new Error(`个性资源警告：${await page.locator(".service-warning-modal").innerText()}`);
     await page.locator(".resource-card-link").first().click();
+    await expect(page).toHaveURL(/\/resources\/?category=/);
+    await page.locator(".resource-card-link").first().click();
+    await expect(page).toHaveURL(/\/resources\/?category=.*knowledge=/);
+    await page.locator(".resource-card-link").first().click();
     await expect(page).toHaveURL(/\/resources\/detail/);
 
     expect(consoleErrors, consoleErrors.join("\n")).toEqual([]);
