@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 
 import { usePathname } from "next/navigation";
-import { BarChart3, BookOpenCheck, CalendarDays, Camera, Home, Languages, MessageCircleQuestion, Sparkles, Timer } from "lucide-react";
+import { BarChart3, CalendarDays, Camera, Home, Languages, MessageCircleQuestion, Sparkles, Timer } from "lucide-react";
 import clsx from "clsx";
 import { UserMenu } from "@/components/user-menu";
 import { useLearningStore } from "@/lib/store";
@@ -14,7 +14,6 @@ const navItems = [
   { href: "/pomodoro", label: "番茄钟", icon: Timer },
   { href: "/photo-search", label: "拍照搜题", icon: Camera },
   { href: "/ai-answer", label: "智能答疑", icon: MessageCircleQuestion },
-  { href: "/homework", label: "作业中心", icon: BookOpenCheck },
   { href: "/language-tools", label: "语言工具", icon: Languages },
   { href: "/review-plan", label: "复习计划", icon: CalendarDays },
   { href: "/resources", label: "个性资源", icon: Sparkles },
@@ -63,5 +62,3 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
-
-

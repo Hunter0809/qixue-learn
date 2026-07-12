@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function ToolsPage() {
-  redirect("/homework");
+  redirect("/ai-answer");
 }

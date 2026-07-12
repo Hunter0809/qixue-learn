@@ -10,7 +10,8 @@ function normalizeMathDelimiters(text: string) {
     .replace(/\\\\\(/g, "\\(")
     .replace(/\\\\\)/g, "\\)")
     .replace(/\\\\\[/g, "\\[")
-    .replace(/\\\\\]/g, "\\]");
+    .replace(/\\\\\]/g, "\\]")
+    .replace(/\\+\$/g, "$");
 }
 
 const bareMathPattern = /((?:Δ|[A-Za-z])[\sA-Za-z0-9²³⁴⁵⁶⁷⁸⁹^()+\-×*/.,=<>]{0,80})/g;

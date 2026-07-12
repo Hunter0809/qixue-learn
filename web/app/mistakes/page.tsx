@@ -6,6 +6,7 @@ import { Eye, Lightbulb, Upload } from "lucide-react";
 import { postJson } from "@/lib/fetcher";
 import type { MistakeAnalysis } from "@/lib/types";
 import { ErrorBlock } from "@/components/status";
+import { MarkdownRenderer } from "@/components/markdown-renderer";
 import { addWeakPoint } from "@/lib/store";
 import { preGenerateResources } from "@/lib/resource-cache";
 
@@ -120,7 +121,7 @@ export default function MistakesPage() {
               {analysis.similarQuestions.map((question) => (
                 <div className="inline-panel" key={question.id}>
                   <span className="pill">{question.knowledge}</span>
-                  <p>{question.stem}</p>
+                  <MarkdownRenderer text={question.stem} />
                 </div>
               ))}
             </div>

@@ -9,7 +9,8 @@ function normalizeMathDelimiters(text: string) {
     .replace(/\\\\\(/g, "\\(")
     .replace(/\\\\\)/g, "\\)")
     .replace(/\\\\\[/g, "\\[")
-    .replace(/\\\\\]/g, "\\]");
+    .replace(/\\\\\]/g, "\\]")
+    .replace(/\\+\$/g, "$");
 }
 
 export function parseLatex(text: string): Segment[] {
@@ -18,7 +19,7 @@ export function parseLatex(text: string): Segment[] {
   const regex = /\$\$([\s\S]*?)\$\$|\\\[([\s\S]*?)\\\]|\\\(([\s\S]*?)\\\)|\$([^\$]+?)\$/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
-  while ((match = regex.exec(text)) !== null) {
+  while ((match = regex.exec(normalized)) !== null) {
     if (match.index > lastIndex) {
       segments.push({ type: "text", content: normalized.slice(lastIndex, match.index) });
     }
@@ -40,6 +41,7 @@ export function parseLatex(text: string): Segment[] {
 export function renderKatex(latex: string, displayMode: boolean): string {
   try {
     const normalizedLatex = latex
+      .replace(/\\\\/g, "\\")
       .replace(/Δ/g, "\\Delta")
       .replace(/×/g, "\\times ")
       .replace(/²/g, "^2")

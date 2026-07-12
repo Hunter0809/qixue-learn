@@ -1,4 +1,5 @@
 import { routeJson } from "@/lib/api-route";
+import { after, NextResponse } from "next/server";
 import { homeworkRequestSchema, homeworkResponseSchema, homeworkTutorResponseSchema } from "@/lib/schemas";
 import { askAgentStreamCollect } from "@/lib/agent";
 import { askDeepSeekStreamCollect } from "@/lib/agent-deepseek";
@@ -8,6 +9,8 @@ import { getCachedHomeworkResponse, setCachedHomeworkResponse } from "@/lib/home
 import { lookupStoredDictionary, type StoredDictionaryEntry } from "@/lib/server-db";
 import { logModuleRequest } from "@/lib/server-logger";
 import { persistHomeworkOutcome } from "@/lib/learning-persistence";
+import type { HomeworkRequest } from "@/lib/types";
+import { createHomeworkJob, updateHomeworkJob } from "@/lib/homework-jobs";
 import { z } from "zod";
 
 const featureSectionTitles: Record<string, string[]> = {
@@ -183,12 +186,9 @@ function ensureThreeKnowledgePoints(params: {
   return Array.from(map.values()).slice(0, 3);
 }
 
-export async function POST(request: Request) {
-  return routeJson(async () => {
-    const body = homeworkRequestSchema.parse(await request.json());
+async function generateHomeworkValue(body: HomeworkRequest, signal?: AbortSignal) {
     const logModule = `homework_${body.feature}`;
     await logModuleRequest(logModule, body);
-
     if (body.feature === "word_lookup" && !body.forceAI) {
       const entries = await lookupStoredDictionary(body.content, body.subject);
       if (entries.length) {
@@ -264,8 +264,8 @@ export async function POST(request: Request) {
     const agentContext = body.imageUrl ? { request: { ...body, imageUrl: undefined }, algorithm } : { request: body, algorithm };
     const generated = responseSchema.parse(
       body.imageUrl
-        ? await askAgentStreamCollect(taskPrompt, responseSchema, agentContext, body.imageUrl, logModule, request.signal)
-        : await askDeepSeekStreamCollect(taskPrompt, responseSchema, agentContext, logModule, request.signal)
+        ? await askAgentStreamCollect(taskPrompt, responseSchema, agentContext, body.imageUrl, logModule, signal)
+        : await askDeepSeekStreamCollect(taskPrompt, responseSchema, agentContext, logModule, signal)
     );
     const normalizedKnowledge = ensureThreeKnowledgePoints({
       subject: body.subject,
@@ -284,12 +284,26 @@ export async function POST(request: Request) {
     await persistHomeworkOutcome(body, value);
     if (key) await setCachedHomeworkResponse(key, value, now);
     return value;
-  });
 }
 
-
-
-
-
-
-
+export async function POST(request: Request) {
+  const body = homeworkRequestSchema.parse(await request.json());
+  if (body.imageUrl) {
+    const job = await createHomeworkJob(body);
+    const generateInBackground = async () => {
+      try {
+        const result = await generateHomeworkValue(body);
+        await updateHomeworkJob(job.jobId, { status: "completed", result });
+      } catch (error) {
+        await updateHomeworkJob(job.jobId, {
+          status: "failed",
+          error: error instanceof Error ? error.message : "后台生成失败"
+        });
+      }
+    };
+    if (process.env.NODE_ENV === "development") void generateInBackground();
+    else after(generateInBackground);
+    return NextResponse.json({ jobId: job.jobId, status: job.status, feature: body.feature, title: "请求已受理，后台正在生成" });
+  }
+  return routeJson(() => generateHomeworkValue(body, request.signal));
+}

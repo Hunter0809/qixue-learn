@@ -7,7 +7,7 @@ const translationImage = "D:\\Mycode\\PythonProject\\Softwarecup\\web\\test\\tes
 test.setTimeout(240_000);
 
 test.describe("启学智伴全模块真实交互", () => {
-  test("图片、答疑、作业、语言、学习空间、计划和个性资源闭环", async ({ page }) => {
+  test("图片、答疑、语言、学习空间、计划、资源和报告闭环", async ({ page }) => {
     const consoleErrors: string[] = [];
     page.on("console", (message) => {
       if (message.type() === "error") consoleErrors.push(message.text());
@@ -77,15 +77,6 @@ test.describe("启学智伴全模块真实交互", () => {
 
     await submitText("/ai-answer", "为什么二次函数有顶点？", "开始答疑", ["直接结论", "关键概念", "推理依据", "追问方向"]);
 
-    await open("/homework");
-    await page.getByRole("button", { name: "作文批改" }).click();
-    await expect(page.locator('textarea[placeholder*="作文"]')).toBeVisible();
-    await page.getByRole("button", { name: "口算批改" }).click();
-    await expect(page.locator('textarea[placeholder*="12×8"]')).toBeVisible();
-    await page.locator("textarea").fill("12×8=96；45+37=72");
-    await page.getByRole("button", { name: "批改口算" }).click();
-    await expectFeatureResult("作业中心-口算批改");
-
     await open("/language-tools");
     await page.getByRole("button", { name: "口语练习" }).click();
     await expect(page.locator('textarea[placeholder*="口语"]')).toBeVisible();
@@ -109,16 +100,16 @@ test.describe("启学智伴全模块真实交互", () => {
     const category = page.locator(".learning-space-subject-card").first();
     if (await category.count()) await category.click();
 
-    const weakPoint = await page.evaluate(() => {
-      const raw = localStorage.getItem("qixue_weak_points");
-      const points = raw ? JSON.parse(raw) : [];
-      const weak = points.find((point: { weight?: number }) => Number(point.weight || 0) >= 25);
+    const weakPoint = await page.evaluate(async () => {
+      const owner = localStorage.getItem("qixue_current_user") || "__anonymous__";
+      const response = await fetch(`/api/weak-points?owner=${encodeURIComponent(owner)}`);
+      const points = await response.json() as Array<{ subject: string; knowledge: string }>;
+      const weak = points[0];
       return weak ? { subject: weak.subject, knowledge: weak.knowledge } : null;
-    });
-    expect(weakPoint, "用户交互没有产生薄弱知识点").not.toBeNull();
+    });    expect(weakPoint, "用户交互没有产生薄弱知识点").not.toBeNull();
 
     await open("/review-plan");
-    await expect(page.locator(".review-plan-detail, .service-warning-modal")).toBeVisible({ timeout: 120_000 });
+    await expect(page.locator(".review-plan-detail, .service-warning-modal").first()).toBeVisible({ timeout: 120_000 });
     if (await page.locator(".service-warning-modal").count()) throw new Error(`复习计划警告：${await page.locator(".service-warning-modal").innerText()}`);
     await page.getByRole("button", { name: /标记完成/ }).first().click();
     await expect(page.getByRole("button", { name: /取消完成/ }).first()).toBeVisible();
@@ -135,6 +126,9 @@ test.describe("启学智伴全模块真实交互", () => {
     await expect(page).toHaveURL(/\/resources\?category=.*knowledge=/);
     await page.locator(".resource-card-link").first().click();
     await expect(page).toHaveURL(/\/resources\/detail/);
+
+    await open("/report");
+    await expect(page.getByRole("heading", { name: "学习效果评估" })).toBeVisible({ timeout: 30_000 });
 
     expect(consoleErrors, consoleErrors.join("\n")).toEqual([]);
     console.log("FULL_INTERACTION_SMOKE_OK");

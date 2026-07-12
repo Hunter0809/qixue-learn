@@ -1,4 +1,4 @@
-﻿import { readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { getStoredLearningVideos, saveStoredLearningVideos } from "@/lib/server-db";
@@ -21,6 +21,7 @@ type BilibiliResponse = {
 
 type VideoResult = {
   bvid: string;
+  url: string;
   title: string;
   author: string;
   play: number;
@@ -113,6 +114,7 @@ function isStageCompatible(text: string, level: string) {
 async function storedResults(keyword: string, subject: string, level: string, limit: number): Promise<VideoResult[]> {
   return (await getStoredLearningVideos({ keyword, subject, level, limit })).map((item) => ({
     bvid: item.bvid,
+    url: item.url,
     title: item.title,
     author: item.author,
     play: item.play,
@@ -155,6 +157,7 @@ function localCrawledVideos(keyword: string, subject: string, level: string, pag
     .slice(0, pageSize)
     .map(({ item, bvid, itemSubject, itemLevel }) => ({
       bvid,
+      url: item.url || `https://www.bilibili.com/video/${bvid}`,
       title: item.title || item.knowledge || "瀛︿範瑙嗛",
       author: item.publisher || "",
       play: item.play || 0,
@@ -177,7 +180,7 @@ async function persistVideos(videos: VideoResult[], keyword: string, subject: st
     keyword,
     subject,
     level,
-    url: `https://www.bilibili.com/video/${item.bvid}`
+    url: item.url || `https://www.bilibili.com/video/${item.bvid}`
   })));
 }
 
@@ -221,6 +224,7 @@ async function searchBilibili(keyword: string, page: number, pageSize: number, b
         if (title.length < 4 || !isStageCompatible(text, level) || BLOCKED_KEYWORDS.test(text)) continue;
         merged.set(item.bvid, {
           bvid: item.bvid,
+          url: `https://www.bilibili.com/video/${item.bvid}`,
           title,
           author: item.author || "",
           play: item.play || 0,
@@ -239,28 +243,20 @@ async function searchBilibili(keyword: string, page: number, pageSize: number, b
 }
 
 export async function POST(request: NextRequest) {
-  const { keyword, page = 1, pageSize = 20, broad = false, level: requestedLevel = "" } = await request.json();
+  const { keyword, page = 1, pageSize = 20, broad = false, level: requestedLevel = "", allowOnline = false } = await request.json();
   const normalizedKeyword = normalizeKeyword(String(keyword || ""));
   const subject = extractSubjectFromKeyword(normalizedKeyword);
   const level = normalizeLabel(requestedLevel) || extractLevelFromKeyword(normalizedKeyword);
   const merged = new Map<string, VideoResult>();
 
   (await storedResults(normalizedKeyword, subject, level, pageSize)).forEach((video) => merged.set(video.bvid, video));
-
-  if (merged.size < pageSize) {
-    try {
-      const searched = await searchBilibili(normalizedKeyword, page, pageSize - merged.size, broad, level);
-      searched.forEach((video) => {
-        if (!merged.has(video.bvid)) merged.set(video.bvid, video);
-      });
-    } catch {
-      // Local crawled videos are queried below after network search errors.
-    }
-  }
-
-  if (merged.size < pageSize) {
-    localCrawledVideos(normalizedKeyword, subject, level, pageSize - merged.size, new Set(merged.keys()))
+  if (merged.size === 0) {
+    localCrawledVideos(normalizedKeyword, subject, level, pageSize, new Set(merged.keys()))
       .forEach((video) => merged.set(video.bvid, video));
+  }
+  if (merged.size === 0 && allowOnline) {
+    const searched = await searchBilibili(normalizedKeyword, page, pageSize, broad, level);
+    searched.forEach((video) => merged.set(video.bvid, video));
   }
 
   const videos = Array.from(merged.values()).slice(0, pageSize);

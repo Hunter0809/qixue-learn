@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { postJson } from "@/lib/fetcher";
 import { emitServiceWarning } from "@/lib/client-warning";
-import type { HomeworkFeature, HomeworkRequest, HomeworkResponse } from "@/lib/types";
+import type { HomeworkFeature, HomeworkJobAccepted, HomeworkRequest, HomeworkResponse } from "@/lib/types";
 import { getFeatureConfig } from "@/lib/feature-config";
 import { getLearnerProfile, loadCurrentUsername, saveLearningHistory } from "@/lib/profile-storage";
 import { useLearningStore, addWeakPoint, getWeakPoints, type WeakPoint } from "@/lib/store";
@@ -270,8 +270,8 @@ function PracticeList({ data }: { data: HomeworkResponse }) {
         {data.similarPractice.map((question) => (
           <div className="inline-panel" key={question.id}>
             <span className="pill"><ListChecks size={13} /> {question.knowledge} · {question.difficulty}</span>
-            <p>{question.stem}</p>
-            {question.options?.length ? <ul>{question.options.map((opt, i) => <li key={i}>{opt}</li>)}</ul> : null}
+            <MarkdownRenderer text={question.stem} />
+            {question.options?.length ? <ul>{question.options.map((opt, i) => <li key={i}><MarkdownRenderer text={opt} /></li>)}</ul> : null}
           </div>
         ))}
       </div>
@@ -474,9 +474,9 @@ function PracticeQuestion({ question, subject, feature }: { question: { id: stri
   return (
     <div className="inline-panel">
       <span className="pill">{question.knowledge} \u00b7 {question.difficulty}</span>
-      <p>{question.stem}</p>
+      <MarkdownRenderer text={question.stem} />
       {question.options?.length ? (
-        <ul>{question.options.map((opt, i) => <li key={i}>{opt}</li>)}</ul>
+        <ul>{question.options.map((opt, i) => <li key={i}><MarkdownRenderer text={opt} /></li>)}</ul>
       ) : null}
       <div className="practice-input-row">
         <input className="input" placeholder="\u8f93\u5165\u7b54\u6848..." value={answer} onChange={(e) => { setAnswer(e.target.value); setResult(null); }} onKeyDown={(e) => e.key === "Enter" && checkAnswer()} />
@@ -614,12 +614,12 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
 
   const { trigger, data, error, isMutating } = useSWRMutation(
     `/api/homework/${config.feature}`,
-    (_url: string, { arg }: { arg: HomeworkRequest }) => postJson<HomeworkResponse, HomeworkRequest>("/api/homework", arg)
+    (_url: string, { arg }: { arg: HomeworkRequest }) => postJson<HomeworkResponse | HomeworkJobAccepted, HomeworkRequest>("/api/homework", arg)
   );
 
   useEffect(() => setHydrated(true), []);
 
-  const displayData = data || storeSnapshot.data;
+  const displayData: HomeworkResponse | undefined = data && "jobId" in data ? storeSnapshot.data : (data || storeSnapshot.data);
   const effectiveMutating = isMutating || storeSnapshot.isMutating;
   const hasSubmittableInput = Boolean(content.trim() || imageUrl);
 
@@ -664,10 +664,10 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
     return () => window.clearInterval(timer);
   }, [effectiveMutating, storeSnapshot.startedAt]);
 
-  function handleHomeworkResponse(request: HomeworkRequest, response: HomeworkResponse) {
+  function handleHomeworkResponse(request: HomeworkRequest, response: HomeworkResponse, workspaceFeature: HomeworkFeature) {
     const record = saveLearningHistory(request, response);
     setLastSaved(record ? "已保存到个人历史" : null);
-    setStoreState(feature, {
+    setStoreState(workspaceFeature, {
       data: response,
       content: request.content === "请识别并分析图片内容" || request.content === "Please identify and solve the problem in the image." ? content : request.content,
       subject: request.subject,
@@ -679,11 +679,37 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
     });
   }
 
+  function recordHomeworkOutcome(request: HomeworkRequest, response: HomeworkResponse, workspaceFeature: HomeworkFeature) {
+    handleHomeworkResponse(request, response, workspaceFeature);
+    const responseKnowledge = (response.knowledge || []).slice(0, 3);
+    for (const knowledge of responseKnowledge) {
+      addWeakPoint(knowledge, request.subject, workspaceFeature, isFeatureCorrect(workspaceFeature));
+    }
+    if (response.similarPractice?.length && responseKnowledge.length < 3) {
+      for (const question of response.similarPractice.slice(0, 3 - responseKnowledge.length)) {
+        addWeakPoint(question.knowledge || request.subject, request.subject, workspaceFeature, false);
+      }
+    }
+  }
+
+  async function waitForHomeworkJob(request: HomeworkRequest, jobId: string, workspaceFeature: HomeworkFeature) {
+    for (let attempt = 0; attempt < 300; attempt += 1) {
+      if (attempt > 0) await new Promise((resolve) => window.setTimeout(resolve, 1000));
+      const response = await fetch(`/api/homework/status?jobId=${encodeURIComponent(jobId)}&owner=${encodeURIComponent(request.owner || "__anonymous__")}`);
+      const payload = await response.json() as { status?: string; result?: HomeworkResponse; error?: string };
+      if (!response.ok) throw new Error(payload.error || "后台生成失败");
+      if (payload.status === "completed" && payload.result) {
+        recordHomeworkOutcome(request, payload.result, workspaceFeature);
+        return;
+      }
+      if (payload.status === "failed") throw new Error(payload.error || "后台生成失败");
+    }
+    throw new Error("后台生成超过 5 分钟仍未完成，请查看任务状态");
+  }
+
   function runHomeworkRequest(request: HomeworkRequest, workspaceFeature: HomeworkFeature = feature) {
     const startedAt = Date.now();
-    if (workspaceFeature === feature) {
-      setPendingRequest(request);
-    }
+    if (workspaceFeature === feature) setPendingRequest(request);
     setStoreState(workspaceFeature, {
       content: request.content,
       subject: request.subject,
@@ -694,30 +720,20 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
       imageUrl: request.imageUrl,
       imagePreview: request.imageUrl
     });
-    void trigger(request).then((response) => {
+    void trigger(request).then(async (response) => {
       if (!response) return;
-      handleHomeworkResponse(request, response);
-      // 所有功能模块的知识点都要关联薄弱点追踪
-      const responseKnowledge = (response.knowledge || []).slice(0, 3);
-      for (const k of responseKnowledge) {
-        // 使用 feature 感知的正确性判定
-        addWeakPoint(k, request.subject, feature, isFeatureCorrect(feature));
+      if ("jobId" in response) {
+        await waitForHomeworkJob(request, response.jobId, workspaceFeature);
+        return;
       }
-      // 相似练习题也关联薄弱点追踪
-      if (response.similarPractice?.length && responseKnowledge.length < 3) {
-        for (const q of response.similarPractice.slice(0, 3 - responseKnowledge.length)) {
-          addWeakPoint(q.knowledge || request.subject, request.subject, feature, false);
-        }
-      }
+      recordHomeworkOutcome(request, response, workspaceFeature);
     }).catch((requestError) => {
-
       const message = requestError instanceof Error ? requestError.message : "生成失败";
       const aborted = requestError instanceof DOMException && requestError.name === "AbortError";
-      if (!aborted) emitServiceWarning("请求链路异常：功能服务没有在规定时间内返回结果，请稍后重试。");
+      if (!aborted) emitServiceWarning(`请求链路异常：${message}，请稍后重试。`);
       setStoreState(workspaceFeature, { isMutating: false, error: message, pendingRequest: request });
     });
   }
-
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!content.trim() && !imageUrl) return;
@@ -1008,5 +1024,3 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
     </section>
   );
 }
-
-

@@ -13,7 +13,6 @@ import { WeakHeatmap } from "@/components/weak-heatmap";
 import { ResourceCategoryCard, groupResourcesBySubject } from "@/components/resource-card";
 import { buildProfileFromActualData, streakMotto } from "@/lib/learning-analytics";
 import { LearningVideoCard, type VideoResource } from "@/components/learning-video-card";
-import { loadEducationalVideos } from "@/lib/video-resources";
 import { isGuestSession, loadCurrentUserProfile, loadCurrentUsername, logoutUser } from "@/lib/profile-storage";
 import { createTodayTask, markCurrentLoginDay, updateTodayTask } from "@/lib/profile-storage";
 import { startTracking, getActivityStats } from "@/lib/activity-tracker";
@@ -294,7 +293,7 @@ function LearningSpaceSection() {
 
   var stageSubjectMap: Record<EducationStage, string[]> = STAGE_SUBJECT_MAP;
 
-  async function fetchSubjectVideos(subject: string, maxPages: number, cancelledRef: { v: boolean }, broad?: boolean): Promise<VideoResource[]> {
+  async function fetchSubjectVideos(subject: string, maxPages: number, cancelledRef: { v: boolean }, broad?: boolean, allowOnline = false): Promise<VideoResource[]> {
     var results: VideoResource[] = [];
     for (var pi = 1; pi <= maxPages; pi++) {
       if (cancelledRef.v) return results;
@@ -302,7 +301,7 @@ function LearningSpaceSection() {
         var resp = await fetch("/api/video-search", {
           method: "POST",
           headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({keyword: subject + " 教学", level, page: pi, pageSize: 50, broad: !!broad})
+          body: JSON.stringify({keyword: subject + " 教学", level, page: pi, pageSize: 50, broad: !!broad, allowOnline: !!allowOnline})
         });
         var data = await resp.json();
         if (!data.videos || !data.videos.length) break;
@@ -318,7 +317,7 @@ function LearningSpaceSection() {
             title: v.title,
             subject,
             knowledge: v.description || v.title,
-            url: "https://www.bilibili.com/video/" + v.bvid,
+            url: v.url || "https://www.bilibili.com/video/" + v.bvid,
             source: "bilibili",
             publisher: v.author,
             duration: v.duration,
@@ -332,23 +331,8 @@ function LearningSpaceSection() {
   }
 
   async function ensureSubjectVideos(subject: string, cancelledRef: { v: boolean }): Promise<VideoResource[]> {
-    var results = await fetchSubjectVideos(subject, 12, cancelledRef);
-    if (cancelledRef.v) return results;
-    if (results.length >= INITIAL_VISIBLE_VIDEOS) return results;
-    try {
-      var remote = await loadEducationalVideos();
-      var subjectLower = subject.toLowerCase();
-      var fallbackVideos = remote.filter(function(video) {
-        var text = (video.title + " " + (video.knowledge || "") + " " + (video.subject || "")).toLowerCase();
-        return video.level === level && (video.subject === subject || text.includes(subjectLower));
-      });
-      results = mergeVideoLists(results, fallbackVideos);
-    } catch (_e) {
-      // ignore fallback failures
-    }
-    return results;
+    return fetchSubjectVideos(subject, 12, cancelledRef, false, false);
   }
-
   useEffect(function() {
     var cancelledRef = { v: false };
     async function searchAllSubjects() {
@@ -382,26 +366,12 @@ function LearningSpaceSection() {
           }
           if (allResults.length >= VIDEO_TARGET_PER_STAGE) break;
         }
-        if (!cancelledRef.v) {
-          if (allResults.length > 0) {
-            writeLearningSpaceCache(stage, allResults);
-            setAllFetched(allResults);
-            setVideos(allResults);
-            setTotalResults(allResults.length);
-            setSearchKeyword(stage + " 学习视频");
-          } else {
-            try {
-              var remote = await loadEducationalVideos();
-              var fallbackVideos = remote.filter(function(v) { return v.level === level; });
-              if (fallbackVideos.length > 0) {
-                writeLearningSpaceCache(stage, fallbackVideos);
-                setAllFetched(fallbackVideos);
-                setVideos(fallbackVideos);
-                setTotalResults(fallbackVideos.length);
-                setSearchKeyword(level + " 精选视频");
-              }
-            } catch (_e) { /* ignore */ }
-          }
+        if (!cancelledRef.v && allResults.length > 0) {
+          writeLearningSpaceCache(stage, allResults);
+          setAllFetched(allResults);
+          setVideos(allResults);
+          setTotalResults(allResults.length);
+          setSearchKeyword(stage + " 学习视频");
         }
       } finally {
         if (!cancelledRef.v) setLoading(false);
@@ -431,7 +401,7 @@ function LearningSpaceSection() {
     try {
       var subjectPrefix = activeSubject === "全部" ? "" : activeSubject;
       var searchKeywordText = [subjectPrefix, videoQuery.trim()].filter(Boolean).join(" ");
-      var results = await fetchSubjectVideos(searchKeywordText, 20, { v: false }, true);
+      var results = await fetchSubjectVideos(searchKeywordText, 20, { v: false }, true, true);
       setSearchResults(results);
       setPage(0);
       setVisibleVideoCount(INITIAL_VISIBLE_VIDEOS);
@@ -460,7 +430,7 @@ function LearningSpaceSection() {
     setVisibleVideoCount(nextCount);
     if (filteredVideos.length >= nextCount) return;
     var targetSubject = activeSubject === "全部" ? (stageSubjectMap[stage] || stageSubjectMap["高中"])[0] : activeSubject;
-    var more = await fetchSubjectVideos(targetSubject, Math.ceil(nextCount / 50) + 1, { v: false }, true);
+    var more = await fetchSubjectVideos(targetSubject, Math.ceil(nextCount / 50) + 1, { v: false }, true, true);
     setAllFetched(function(prev) {
       var merged = mergeVideoLists(prev, more);
       writeLearningSpaceCache(stage, merged);
@@ -874,4 +844,3 @@ export default function HomePage() {
     </>
   );
 }
-
