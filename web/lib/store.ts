@@ -11,7 +11,6 @@ type WorkspaceSnapshot = {
   data?: HomeworkResponse;
   error?: string;
   isMutating: boolean;
-  streamText?: string;
   imageUrl?: string;
   imagePreview?: string;
   startedAt?: number;

@@ -135,43 +135,30 @@ function parseMarkdownSections(text: string): { title: string; body: string }[] 
 
 function findSectionText(
   cardTitle: string,
-  dataSections: { title: string; items: string[] }[] | undefined,
-  streamSections: { title: string; body: string }[]
+  dataSections: { title: string; items: string[] }[] | undefined
 ) {
   const normalized = normalizeCardTitle(cardTitle);
   const dataSection = dataSections?.find((section) => {
     const sectionTitle = normalizeCardTitle(section.title);
     return sectionTitle.includes(normalized) || normalized.includes(sectionTitle);
   });
-  if (dataSection?.items.length) return dataSection.items.join("\n\n");
-  const streamSection = streamSections.find((section) => section.title.includes(normalized) || normalized.includes(section.title));
-  return streamSection?.body || "";
+  return dataSection?.items.length ? dataSection.items.join("\n\n") : "";
 }
 
-function EmptyResultCards({ mode, feature, isLoading, streamText, onFollowUp }: { mode: LayoutMode; feature: HomeworkFeature; isLoading: boolean; streamText: string; onFollowUp?: (question: string) => void }) {
+function EmptyResultCards({ mode, feature, isLoading }: { mode: LayoutMode; feature: HomeworkFeature; isLoading: boolean }) {
   const lead = isLoading ? "AI 正在生成，会把结果写入下方卡片。" : "提交内容后，AI 会把结果写入下方卡片。";
   const blueprint = emptyBlueprint(feature);
-  const streamSections = parseMarkdownSections(streamText);
-  const hasStructuredStream = streamSections.length > 0;
-  const boldAsSubheading = feature === "photo_search";
   return (
     <div className={`feature-result result-${mode} output-blueprint output-blueprint-${blueprint.tone}`}>
       <ResultCard title={blueprint.title}>
-        {streamText && !hasStructuredStream ? <MarkdownRenderer text={streamText} boldAsSubheading={boldAsSubheading} /> : <p className="muted">{hasStructuredStream ? "结果已写入下方卡片。" : lead}</p>}
+        <p className="muted">{lead}</p>
       </ResultCard>
       <div className="result-sections blueprint-cards">
-        {blueprint.cards.map((title, index) => {
-          const sectionText = findSectionText(title, undefined, streamSections);
-          return (
-            <ResultCard title={title} key={title}>
-              {sectionText
-                ? feature === "ai_answer" && title === "追问方向"
-                  ? <FollowUpActions text={sectionText} onFollowUp={onFollowUp} />
-                  : <MarkdownRenderer text={sectionText} boldAsSubheading={boldAsSubheading} />
-                : <p className="muted">{isLoading ? "智能体正在填充。" : index === 0 ? "提交后优先生成。" : "随结果自动补全。"}</p>}
-            </ResultCard>
-          );
-        })}
+        {blueprint.cards.map((title, index) => (
+          <ResultCard title={title} key={title}>
+            <p className="muted">{isLoading ? "智能体正在填充。" : index === 0 ? "提交后优先生成。" : "随结果自动补全。"}</p>
+          </ResultCard>
+        ))}
       </div>
     </div>
   );
@@ -253,7 +240,7 @@ function BlueprintResultBody({ data, feature, onFollowUp }: { data: HomeworkResp
   return (
     <>
       {blueprint.cards.map((title, index) => {
-        const sectionText = findSectionText(title, data.sections, answerSections);
+        const sectionText = findSectionText(title, data.sections);
         const text = sectionText || (index === 0 ? data.answer : "");
         return (
           <ResultCard title={title} filled={Boolean(text)} key={title}>
@@ -406,7 +393,6 @@ function ResultPanel({
   mode,
   feature,
   isLoading,
-  streamText,
   onAskAIWordLookup,
   onFollowUp
 }: {
@@ -414,12 +400,11 @@ function ResultPanel({
   mode: LayoutMode;
   feature: HomeworkFeature;
   isLoading: boolean;
-  streamText: string;
   onAskAIWordLookup?: () => void;
   onFollowUp?: (question: string) => void;
 }) {
   if (!data) {
-    return <EmptyResultCards mode={mode} feature={feature} isLoading={isLoading} streamText={streamText} />;
+    return <EmptyResultCards mode={mode} feature={feature} isLoading={isLoading} />;
   }
 
   return (
@@ -492,7 +477,6 @@ const MIN_VISION_IMAGE_EDGE = 640;
 const VISION_IMAGE_QUALITY = 0.62;
 const MIN_VISION_IMAGE_QUALITY = 0.34;
 const MAX_VISION_IMAGE_DATA_URL_LENGTH = 900_000;
-const CLIENT_STREAM_TIMEOUT_MS = 180000;
 
 function drawScaledCanvas(canvas: HTMLCanvasElement, maxEdge: number) {
   const scale = Math.min(1, maxEdge / Math.max(canvas.width, canvas.height));
@@ -598,7 +582,6 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
   const [voiceStatus, setVoiceStatus] = useState("");
   const [voiceListening, setVoiceListening] = useState(false);
   const [liveTranscript, setLiveTranscript] = useState("");
-  const [streamText, setStreamText] = useState(storeSnapshot.streamText || "");
   const [processingSeconds, setProcessingSeconds] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -606,8 +589,6 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
   const recognitionRef = useRef<InstanceType<SpeechRecognitionConstructor> | null>(null);
   const dictationBaseRef = useRef("");
   const dictationFinalRef = useRef("");
-  const streamAbortRef = useRef<AbortController | null>(null);
-  const streamRunIdRef = useRef(0);
   const canScan = mode === "scan";
   const canDictate = mode === "oral" || mode === "dialog";
   const showDictationOnly = mode === "oral" && canDictate && (voiceListening || Boolean(liveTranscript));
@@ -622,7 +603,6 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
 
   const displayData = data || storeSnapshot.data;
   const effectiveMutating = isMutating || storeSnapshot.isMutating;
-  const visibleStreamText = streamText || storeSnapshot.streamText || "";
   const hasSubmittableInput = Boolean(content.trim() || imageUrl);
 
   useEffect(() => {
@@ -632,7 +612,6 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
     setPendingRequest(nextSnapshot.pendingRequest || null);
     setImageUrl(nextSnapshot.imageUrl || null);
     setImagePreview(nextSnapshot.imagePreview || null);
-    setStreamText(nextSnapshot.streamText || "");
     setLiveTranscript("");
     setVoiceStatus("");
     setVoiceListening(false);
@@ -646,14 +625,12 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
     setPendingRequest(storeSnapshot.pendingRequest || null);
     setImageUrl(storeSnapshot.imageUrl || null);
     setImagePreview(storeSnapshot.imagePreview || null);
-    setStreamText(storeSnapshot.streamText || "");
   }, [
     config.subjectDefault,
     storeSnapshot.content,
     storeSnapshot.imagePreview,
     storeSnapshot.imageUrl,
     storeSnapshot.pendingRequest,
-    storeSnapshot.streamText,
     storeSnapshot.subject
   ]);
 
@@ -684,41 +661,22 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
     });
   }
 
-  function isStreamOnlyFeature(feature: HomeworkFeature) {
-    return feature === "ai_answer" || feature === "photo_search" || feature === "photo_translate";
-  }
-
   function runHomeworkRequest(request: HomeworkRequest, workspaceFeature: HomeworkFeature = feature) {
-    streamAbortRef.current?.abort();
-    const streamController = new AbortController();
-    streamAbortRef.current = streamController;
-    const streamTimeout = window.setTimeout(() => streamController.abort(), CLIENT_STREAM_TIMEOUT_MS);
-    const runId = streamRunIdRef.current + 1;
-    streamRunIdRef.current = runId;
     const startedAt = Date.now();
-    const streamOnly = false;
     if (workspaceFeature === feature) {
-      setStreamText("");
       setPendingRequest(request);
     }
     setStoreState(workspaceFeature, {
       content: request.content,
       subject: request.subject,
       isMutating: true,
-      streamText: "",
       error: undefined,
       startedAt,
       pendingRequest: request,
       imageUrl: request.imageUrl,
       imagePreview: request.imageUrl
     });
-    if (false) {
-      void streamHomework(request, streamOnly, runId, streamController.signal, workspaceFeature).finally(() => window.clearTimeout(streamTimeout));
-    } else {
-      window.clearTimeout(streamTimeout);
-    }
-    if (streamOnly) return;
-      void trigger(request).then((response) => {
+    void trigger(request).then((response) => {
       if (!response) return;
       handleHomeworkResponse(request, response);
       // 所有功能模块的知识点都要关联薄弱点追踪
@@ -790,7 +748,7 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
     runHomeworkRequest(request);
   }
 
-  /** 根据功能类型判断流式知识更新的正确性
+  /** 根据功能类型判断知识点追踪的正确性
    *  review/correction 类 → 发现薄弱点（correct=false，增加权重）
    *  查看/学习类 → 正向学习行为（correct=true，降低权重）
    */
@@ -810,75 +768,6 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
     return true;
   }
 
-  async function streamHomework(request: HomeworkRequest, finalizeWhenDone = false, runId = streamRunIdRef.current, signal?: AbortSignal, workspaceFeature: HomeworkFeature = feature) {
-    const isCurrentRun = () => streamRunIdRef.current === runId;
-    try {
-      const response = await fetch("/api/homework/stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(request),
-        signal
-      });
-      if (!response.ok || !response.body) {
-        emitServiceWarning("请求链路异常：流式服务没有返回有效结果，请稍后重试。");
-        throw new Error("流式生成失败");
-      }
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let accumulated = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        accumulated += decoder.decode(value, { stream: true });
-        if (!isCurrentRun()) break;
-        if (workspaceFeature === feature) setStreamText(accumulated);
-        setStoreState(workspaceFeature, { streamText: accumulated, pendingRequest: request });
-      }
-      if (!accumulated.trim()) {
-        emitServiceWarning("请求链路异常：服务连接成功但没有返回内容。");
-      }
-      if (finalizeWhenDone && isCurrentRun()) {
-        setStoreState(workspaceFeature, {
-          isMutating: false,
-          pendingRequest: request,
-          imageUrl: request.imageUrl,
-          imagePreview: request.imageUrl
-        });
-      }
-      const match = accumulated.match(/\[知识点:\s*([^\]]+)\]/);
-      if (match) {
-        const isCorrect = isFeatureCorrect(request.feature);
-        match[1].split(/[,，、]/).map((item) => item.trim()).filter(Boolean).slice(0, 3).forEach((item) => {
-          addWeakPoint(item, request.subject, request.feature, isCorrect);
-          persistBehaviorFromClient(request, item, isCorrect);
-        });
-      }
-    } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") {
-        if (finalizeWhenDone && isCurrentRun()) setStoreState(workspaceFeature, { isMutating: false, pendingRequest: request });
-        return;
-      }
-      if (!isCurrentRun()) return;
-      const interruptionMessage = "识别或生成过程暂时中断，请检查网络或稍后重试。";
-      emitServiceWarning(`请求链路异常：${interruptionMessage}`);
-      if (workspaceFeature === feature) setStreamText((value) => value || interruptionMessage);
-      setStoreState(workspaceFeature, {
-        streamText: interruptionMessage,
-        error: err instanceof Error ? err.message : "流式生成失败",
-        isMutating: false,
-        pendingRequest: request
-      });
-    } finally {
-      if (finalizeWhenDone && isCurrentRun()) {
-        setStoreState(workspaceFeature, {
-          isMutating: false,
-          pendingRequest: request,
-          imageUrl: request.imageUrl,
-          imagePreview: request.imageUrl
-        });
-      }
-    }
-  }
 
   async function storeImage(source: File | HTMLCanvasElement, autoSubmit = false) {
     setProcessingImage(true);
@@ -1002,8 +891,6 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
   }, [cameraOn]);
 
   useEffect(() => () => {
-    streamAbortRef.current?.abort();
-    streamRunIdRef.current += 1;
     setStoreState(feature, { isMutating: false });
     stopCamera();
     recognitionRef.current?.stop();
@@ -1097,7 +984,7 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
 
         <section className={`feature-output feature-output-${mode}`}>
           {(error || storeSnapshot.error) ? <ErrorBlock error={error || storeSnapshot.error} /> : null}
-          <ResultPanel data={displayData} mode={mode} feature={config.feature} isLoading={effectiveMutating} streamText={visibleStreamText} onAskAIWordLookup={askAIWordLookup} onFollowUp={askFollowUp} />
+          <ResultPanel data={displayData} mode={mode} feature={config.feature} isLoading={effectiveMutating} onAskAIWordLookup={askAIWordLookup} onFollowUp={askFollowUp} />
         </section>
       </section>
     </section>
