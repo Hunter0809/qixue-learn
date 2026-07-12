@@ -530,28 +530,53 @@ function canvasToCompressedDataUrl(canvas: HTMLCanvasElement) {
 function fileToCompressedDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(reader.error);
+    let settled = false;
+    const finish = (value: string) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      resolve(value);
+    };
+    const fail = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      reject(error);
+    };
+    const timer = window.setTimeout(() => {
+      if (typeof reader.result === "string") finish(reader.result);
+      else fail(new Error("Image processing timed out"));
+    }, 5000);
+    reader.onerror = () => fail(reader.error || new Error("Image file could not be read"));
     reader.onload = () => {
+      const raw = reader.result;
+      if (typeof raw !== "string") {
+        fail(new Error("Image file could not be decoded"));
+        return;
+      }
       const image = new Image();
-      image.onerror = () => reject(new Error("Invalid image file"));
+      image.onerror = () => finish(raw);
       image.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = image.naturalWidth;
-        canvas.height = image.naturalHeight;
-        const context = canvas.getContext("2d");
-        if (!context) {
-          resolve(reader.result as string);
-          return;
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = image.naturalWidth;
+          canvas.height = image.naturalHeight;
+          const context = canvas.getContext("2d");
+          if (!context) {
+            finish(raw);
+            return;
+          }
+          context.drawImage(image, 0, 0);
+          finish(canvasToCompressedDataUrl(canvas));
+        } catch {
+          finish(raw);
         }
-        context.drawImage(image, 0, 0);
-        resolve(canvasToCompressedDataUrl(canvas));
       };
-      image.src = reader.result as string;
+      image.src = raw;
     };
     reader.readAsDataURL(file);
   });
 }
-
 export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
   const config = getFeatureConfig(feature);
   const mode = getLayoutMode(config.feature);
@@ -874,7 +899,7 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
 
   function recognizeImage(source: File | HTMLCanvasElement) {
     if (canScan && source instanceof File) {
-      void fileToCompressedDataUrl(source).then((dataUrl) => setCropSrc(dataUrl));
+      void fileToCompressedDataUrl(source).then((dataUrl) => setCropSrc(dataUrl)).catch(() => emitServiceWarning("请求链路异常：图片处理失败，请重新选择图片。"));
     } else {
       void storeImage(source);
     }
