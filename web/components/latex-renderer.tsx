@@ -4,31 +4,53 @@ import { useEffect, useRef, useState } from "react";
 
 type Segment = { type: "text" | "latex-display" | "latex-inline"; content: string };
 
+function normalizeMathDelimiters(text: string) {
+  return text
+    .replace(/\\\\\(/g, "\\(")
+    .replace(/\\\\\)/g, "\\)")
+    .replace(/\\\\\[/g, "\\[")
+    .replace(/\\\\\]/g, "\\]");
+}
+
 export function parseLatex(text: string): Segment[] {
+  const normalized = normalizeMathDelimiters(text);
   const segments: Segment[] = [];
-  const regex = /\$\$([\s\S]*?)\$\$|\$([^\$]+?)\$/g;
+  const regex = /\$\$([\s\S]*?)\$\$|\\\[([\s\S]*?)\\\]|\\\(([\s\S]*?)\\\)|\$([^\$]+?)\$/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = regex.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      segments.push({ type: "text", content: text.slice(lastIndex, match.index) });
+      segments.push({ type: "text", content: normalized.slice(lastIndex, match.index) });
     }
-    if (match[1] !== undefined) {
-      segments.push({ type: "latex-display", content: match[1].trim() });
+    if (match[1] !== undefined || match[2] !== undefined) {
+      segments.push({ type: "latex-display", content: (match[1] ?? match[2] ?? "").trim() });
+    } else if (match[3] !== undefined) {
+      segments.push({ type: "latex-inline", content: match[3].trim() });
     } else {
-      segments.push({ type: "latex-inline", content: match[2].trim() });
+      segments.push({ type: "latex-inline", content: (match[4] ?? "").trim() });
     }
     lastIndex = regex.lastIndex;
   }
-  if (lastIndex < text.length) {
-    segments.push({ type: "text", content: text.slice(lastIndex) });
+  if (lastIndex < normalized.length) {
+    segments.push({ type: "text", content: normalized.slice(lastIndex) });
   }
   return segments;
 }
 
 export function renderKatex(latex: string, displayMode: boolean): string {
   try {
-    const normalizedLatex = latex.replace(/[\u4e00-\u9fff]+/g, (text) => `\\text{${text}}`);
+    const normalizedLatex = latex
+      .replace(/Δ/g, "\\Delta")
+      .replace(/×/g, "\\times ")
+      .replace(/²/g, "^2")
+      .replace(/³/g, "^3")
+      .replace(/⁴/g, "^4")
+      .replace(/⁵/g, "^5")
+      .replace(/⁶/g, "^6")
+      .replace(/⁷/g, "^7")
+      .replace(/⁸/g, "^8")
+      .replace(/⁹/g, "^9")
+      .replace(/[\u4e00-\u9fff]+/g, (text) => `\\text{${text}}`);
     return katex.renderToString(normalizedLatex, { displayMode, throwOnError: false, trust: true });
   } catch {
     return latex;
@@ -143,18 +165,12 @@ function FunctionGraph({ expr }: { expr: string }) {
 }
 
 function LatexSegment({ seg }: { seg: Segment }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    if (!ref.current) return;
-    if (seg.type === "latex-display") {
-      ref.current.innerHTML = renderKatex(seg.content, true);
-    } else if (seg.type === "latex-inline") {
-      ref.current.innerHTML = renderKatex(seg.content, false);
-    }
-  }, [seg]);
-
-  if (seg.type === "latex-display") return <span ref={ref} className="latex-block" />;
-  if (seg.type === "latex-inline") return <span ref={ref} className="latex-inline" />;
+  if (seg.type === "latex-display") {
+    return <span className="latex-block" dangerouslySetInnerHTML={{ __html: renderKatex(seg.content, true) }} />;
+  }
+  if (seg.type === "latex-inline") {
+    return <span className="latex-inline" dangerouslySetInnerHTML={{ __html: renderKatex(seg.content, false) }} />;
+  }
   return <>{seg.content}</>;
 }
 

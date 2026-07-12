@@ -29,7 +29,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="app-shell">`r`n      <ServiceWarningModal />
+    <div className="app-shell">
+      <ServiceWarningModal />
       <header className="site-header">
         <a className="brand" href="/">
           <span className="brand-logo">

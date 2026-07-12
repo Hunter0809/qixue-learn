@@ -5,27 +5,43 @@ import { renderKatex } from "./latex-renderer";
 
 /* ── LaTeX 内联/块级渲染组件 ── */
 
+function normalizeMathDelimiters(text: string) {
+  return text
+    .replace(/\\\\\(/g, "\\(")
+    .replace(/\\\\\)/g, "\\)")
+    .replace(/\\\\\[/g, "\\[")
+    .replace(/\\\\\]/g, "\\]");
+}
+
+const bareMathPattern = /((?:Δ|[A-Za-z])[\sA-Za-z0-9²³⁴⁵⁶⁷⁸⁹^()+\-×*/.,=<>]{0,80})/g;
+
+function isBareMath(value: string) {
+  return /[=<>²³⁴⁵⁶⁷⁸⁹^×√]/.test(value) && /(?:[A-Za-zΔ].*[=<>]|[²³⁴⁵⁶⁷⁸⁹^×√])/.test(value);
+}
+
+function renderTextFragment(text: string, keyPrefix: string) {
+  const plainParts = text.split(bareMathPattern).filter(Boolean);
+  return plainParts.map((plainPart, index) => (
+    isBareMath(plainPart)
+      ? <LatexInline key={`${keyPrefix}-math-${index}`} latex={plainPart.trim()} />
+      : <React.Fragment key={`${keyPrefix}-text-${index}`}>{plainPart}</React.Fragment>
+  ));
+}
+
 function LatexInline({ latex }: { latex: string }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    if (ref.current) ref.current.innerHTML = renderKatex(latex, false);
-  }, [latex]);
-  return <span ref={ref} className="latex-inline" />;
+  return <span className="latex-inline" dangerouslySetInnerHTML={{ __html: renderKatex(latex, false) }} />;
 }
 
 function LatexBlock({ latex }: { latex: string }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (ref.current) ref.current.innerHTML = renderKatex(latex, true);
-  }, [latex]);
-  return <div ref={ref} className="latex-block" />;
+  return <div className="latex-block" dangerouslySetInnerHTML={{ __html: renderKatex(latex, true) }} />;
 }
 
 /* ── 行内渲染 ── */
 
 function renderInline(text: string) {
   // 同时处理 **bold**、`code`、$inline latex$
-  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`|\\\([\s\S]+?\\\)|\$[^$]+?\$)/g).filter(Boolean);
+  const normalized = normalizeMathDelimiters(text);
+  const parts = normalized.split(/(\*\*[^*]+\*\*|`[^`]+`|\\\([\s\S]+?\\\)|\$[^$]+?\$)/g).filter(Boolean);
   return parts.map((part, index) => {
     if (part.startsWith("**") && part.endsWith("**")) {
       return <strong key={index}>{part.slice(2, -2)}</strong>;
@@ -39,7 +55,7 @@ function renderInline(text: string) {
     if (part.startsWith("\\(") && part.endsWith("\\)")) {
       return <LatexInline key={index} latex={part.slice(2, -2)} />;
     }
-    return <React.Fragment key={index}>{part}</React.Fragment>;
+    return <React.Fragment key={index}>{renderTextFragment(part, String(index))}</React.Fragment>;
   });
 }
 
@@ -47,7 +63,8 @@ function renderInline(text: string) {
 
 function renderParagraph(text: string) {
   // 按 $$...$$ 分割，块级公式独立渲染，文本段送 renderInline
-  const parts = text.split(/(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\])/g).filter(Boolean);
+  const normalized = normalizeMathDelimiters(text);
+  const parts = normalized.split(/(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\])/g).filter(Boolean);
   return (
     <>
       {parts.map((part, i) => {
