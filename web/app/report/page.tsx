@@ -6,12 +6,10 @@ import { Download } from "lucide-react";
 import type { PlanResponse, ReportResponse, WeakPoint as ReportWeakPoint } from "@/lib/types";
 import { WeakHeatmap } from "@/components/weak-heatmap";
 import { PersonalizedGate } from "@/components/personalized-gate";
-import { buildReportFromActualData } from "@/lib/learning-analytics";
-import { getActivityStats } from "@/lib/activity-tracker";
 import { deleteWeakPoint, getWeakPoints, getWeakPointProgress, getMasteryLevel, type WeakPoint } from "@/lib/store";
 import { type ConfirmAction } from "@/components/confirm-popup";
-import { loadLearningHistory } from "@/lib/profile-storage";
-import { getAllCachedReviewPlans, preGenerateReviewPlans } from "@/lib/review-plan-cache";
+import { loadCurrentUsername, loadLearningHistory } from "@/lib/profile-storage";
+import { ErrorBlock, LoadingBlock } from "@/components/status";
 
 const AccuracyLineChart = dynamic(
   () => import("@/components/charts").then((module) => module.AccuracyLineChart),
@@ -30,12 +28,6 @@ function reportWeakPointsFromTracked(points: WeakPoint[]): (ReportWeakPoint & { 
 }
 
 
-function cachedPlanList() {
-  return Object.entries(getAllCachedReviewPlans()).map(([subject, entry]) => ({
-    subject,
-    plan: entry.plan
-  }));
-}
 
 function emptyReport(range: "week" | "month"): ReportResponse {
   return {
@@ -63,6 +55,8 @@ export default function ReportPage() {
   const [reviewPlans, setReviewPlans] = useState<{ subject: string; plan: PlanResponse }[]>([]);
   const [history, setHistory] = useState<ReturnType<typeof loadLearningHistory>>([]);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [loadingReport, setLoadingReport] = useState(true);
+  const [reportError, setReportError] = useState<Error | null>(null);
   void confirmAction;
   const knowledgeNames = [...new Set(history.flatMap((r: { response: { knowledge?: string[] } }) => r.response.knowledge || []))];
   const wrongRecords = history.filter((r: { feature: string }) => r.feature.includes("review") || r.feature.includes("correction") || r.feature === "mental_math_check");
@@ -90,32 +84,38 @@ export default function ReportPage() {
   }
 
   useEffect(() => {
-    setData(buildReportFromActualData(range));
-    const activityStats = getActivityStats();
-    setTrackedHours(Math.round(activityStats.totalMinutes / 60 * 10) / 10);
     setStoreWeakPoints(getWeakPoints());
     setHistory(loadLearningHistory());
-    setReviewPlans(cachedPlanList());
+    const controller = new AbortController();
+    setLoadingReport(true);
+    setReportError(null);
+    const owner = loadCurrentUsername() || "__anonymous__";
+    fetch(`/api/report?range=${range}&owner=${encodeURIComponent(owner)}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`报告加载失败（${response.status}）`);
+        return response.json() as Promise<ReportResponse>;
+      })
+      .then((report) => {
+        setData(report);
+        setTrackedHours(report.studyHours);
+        setReviewPlans(report.plans || []);
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setReportError(error instanceof Error ? error : new Error("报告加载失败"));
+      })
+      .finally(() => setLoadingReport(false));
+    return () => controller.abort();
   }, [range]);
 
   useEffect(() => {
-    if (storeWeakPoints.length) preGenerateReviewPlans(storeWeakPoints);
-
-    function reloadPlans() {
-      setReviewPlans(cachedPlanList());
-      setData(buildReportFromActualData(range));
+    function reloadWeakPoints() {
+      setStoreWeakPoints(getWeakPoints());
+      setHistory(loadLearningHistory());
     }
-
-    reloadPlans();
-    window.addEventListener("qixue:review-plan-ready", reloadPlans);
-    window.addEventListener("qixue:review-plan-generating", reloadPlans);
-    return () => {
-      window.removeEventListener("qixue:review-plan-ready", reloadPlans);
-      window.removeEventListener("qixue:review-plan-generating", reloadPlans);
-    };
-  }, [range, storeWeakPoints]);
-
-
+    window.addEventListener("qixue:learning-behavior-recorded", reloadWeakPoints);
+    return () => window.removeEventListener("qixue:learning-behavior-recorded", reloadWeakPoints);
+  }, []);
   async function loadFontBase64(path: string) {
     const response = await fetch(path);
     if (!response.ok) throw new Error("PDF 字体加载失败");
@@ -197,6 +197,8 @@ export default function ReportPage() {
 
   return (
     <PersonalizedGate>
+      {loadingReport ? <LoadingBlock label="正在读取真实学习数据" /> : null}
+      {reportError ? <ErrorBlock error={reportError} /> : null}
       <section className="section clean-top">
         <div className="row report-action-row">
           <div className="segmented report-tabs">
@@ -223,7 +225,21 @@ export default function ReportPage() {
             <span className="muted" style={{ fontSize: "0.75rem" }}>点击查看详情</span>
           </div>
         </div>
-        <div className="section grid two">
+        {data.evaluation ? (
+          <div className="section card">
+            <h2 className="card-title">学习效果评估</h2>
+            <div className="grid three">
+              <div><span className="muted">总交互</span><strong>{data.evaluation.totalInteractions}</strong></div>
+              <div><span className="muted">资源交互</span><strong>{data.evaluation.resourceInteractions}</strong></div>
+              <div><span className="muted">练习次数</span><strong>{data.evaluation.practiceAttempts}</strong></div>
+              <div><span className="muted">练习正确率</span><strong>{data.evaluation.accuracy}%</strong></div>
+              <div><span className="muted">完成率</span><strong>{data.evaluation.completionRate}%</strong></div>
+              <div><span className="muted">掌握度</span><strong>{data.evaluation.masteryScore}%</strong></div>
+            </div>
+            <p className="muted" style={{ marginTop: "var(--space-3)" }}>活跃 {data.evaluation.activeDays} 天 · 已根据行为动态调整 {data.evaluation.adjustmentActions.length} 项</p>
+            {data.evaluation.adjustmentActions.length ? <ul>{data.evaluation.adjustmentActions.map((action) => <li key={action}>{action}</li>)}</ul> : null}
+          </div>
+        ) : null}        <div className="section grid two">
           <div className="card">
             <h2 className="card-title">正确率趋势</h2>
             <AccuracyLineChart data={data.accuracyTrend} />

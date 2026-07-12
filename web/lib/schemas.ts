@@ -112,7 +112,10 @@ export const quizSchema = z.object({
 
 export const quizSubmitRequestSchema = z.object({
   quizId: id,
-  answers: z.record(z.string(), z.string())
+  answers: z.record(z.string(), z.string()),
+  questions: z.array(questionSchema).min(1),
+  owner: z.string().optional(),
+  profile: learnerProfileSchema.optional()
 });
 
 export const quizSubmitSchema = z.object({
@@ -157,6 +160,17 @@ export const mistakeAnalysisSchema = z.object({
   similarQuestions: z.array(questionSchema)
 });
 
+const reportEvaluationSchema = z.object({
+  totalInteractions: z.number().int().nonnegative(),
+  resourceInteractions: z.number().int().nonnegative(),
+  practiceAttempts: z.number().int().nonnegative(),
+  correctAttempts: z.number().int().nonnegative(),
+  accuracy: percent,
+  completionRate: percent,
+  activeDays: z.number().int().nonnegative(),
+  masteryScore: percent,
+  adjustmentActions: z.array(z.string())
+});
 export const reportSchema = z.object({
   range: z.enum(["week", "month"]),
   studyHours: z.number().nonnegative(),
@@ -173,7 +187,9 @@ export const reportSchema = z.object({
     minutes: z.number().int().positive(),
     reminder: z.string()
   })),
-  weakPoints: z.array(weakPointSchema)
+  weakPoints: z.array(weakPointSchema),
+  evaluation: reportEvaluationSchema.optional(),
+  plans: z.array(z.object({ subject: z.string(), plan: planSchema })).optional()
 });
 
 export const homeworkRequestSchema = z.object({
@@ -220,7 +236,10 @@ export const homeworkResponseSchema = z.object({
     return value;
   }, z.array(z.string()).optional().default([])),
   knowledge: z.array(z.string()).optional().default([]),
-  similarPractice: z.array(questionSchema).optional().default([]),
+  similarPractice: z.preprocess((value) => {
+    if (value && !Array.isArray(value) && typeof value === "object") return [value];
+    return value;
+  }, z.array(questionSchema).optional().default([])),
   nextAction: z.unknown().optional().transform((value) => {
     if (typeof value === "string") return value;
     if (value == null) return "";
@@ -231,6 +250,3 @@ export const homeworkResponseSchema = z.object({
 });
 
 export const homeworkTutorResponseSchema = homeworkResponseSchema.extend({ artifacts: tutorArtifactsSchema });
-
-
-

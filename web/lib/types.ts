@@ -84,6 +84,9 @@ export type QuizResponse = {
 export type QuizSubmitRequest = {
   quizId: string;
   answers: Record<string, string>;
+  questions: QuizQuestion[];
+  owner?: string;
+  profile?: LearnerProfile;
 };
 
 export type QuestionFeedback = {
@@ -130,6 +133,17 @@ export type MistakeAnalysis = {
   similarQuestions: QuizQuestion[];
 };
 
+export type ReportEvaluation = {
+  totalInteractions: number;
+  resourceInteractions: number;
+  practiceAttempts: number;
+  correctAttempts: number;
+  accuracy: number;
+  completionRate: number;
+  activeDays: number;
+  masteryScore: number;
+  adjustmentActions: string[];
+};
 export type ReportResponse = {
   range: "week" | "month";
   studyHours: number;
@@ -138,6 +152,8 @@ export type ReportResponse = {
   accuracyTrend: { label: string; accuracy: number }[];
   reviewPlan: { id: string; date: string; title: string; minutes: number; reminder: string }[];
   weakPoints: WeakPoint[];
+  evaluation?: ReportEvaluation;
+  plans?: { subject: string; plan: PlanResponse }[];
 };
 
 export type HomeworkFeature =
@@ -169,6 +185,13 @@ export type TutorArtifacts = {
   videoScript: string;
   animationStoryboard: string;
 };
+export type HomeworkJobAccepted = {
+  jobId: string;
+  status: "processing";
+  feature: HomeworkFeature;
+  title: string;
+};
+
 export type HomeworkResponse = {
   feature: HomeworkFeature;
   title: string;
@@ -198,4 +221,3 @@ export type LearnerProfile = {
   historySummary?: string;
   targetExam?: string;
 };
-

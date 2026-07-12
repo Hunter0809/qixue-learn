@@ -108,8 +108,10 @@ async function ensurePgSchema() {
         knowledge TEXT NOT NULL,
         source TEXT NOT NULL,
         weight DOUBLE PRECISION NOT NULL,
+        correct BOOLEAN,
         created_at BIGINT NOT NULL
       )`,
+      "ALTER TABLE learning_behaviors ADD COLUMN IF NOT EXISTS correct BOOLEAN",
       "CREATE INDEX IF NOT EXISTS idx_learning_behaviors_owner_knowledge ON learning_behaviors (owner, subject, knowledge, created_at)",
       `CREATE TABLE IF NOT EXISTS dictionary_entries (
         language TEXT NOT NULL,
@@ -403,6 +405,7 @@ function getDb() {
       knowledge TEXT NOT NULL,
       source TEXT NOT NULL,
       weight REAL NOT NULL,
+      correct INTEGER,
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_learning_behaviors_owner_knowledge ON learning_behaviors (owner, subject, knowledge, created_at);
@@ -468,7 +471,8 @@ function getDb() {
     "ALTER TABLE user_profiles ADD COLUMN error_preference TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE user_profiles ADD COLUMN learning_preference TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE user_profiles ADD COLUMN history_summary TEXT NOT NULL DEFAULT ''",
-    "ALTER TABLE user_profiles ADD COLUMN target_exam TEXT NOT NULL DEFAULT ''"
+    "ALTER TABLE user_profiles ADD COLUMN target_exam TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE learning_behaviors ADD COLUMN correct INTEGER"
   ]) {
     try { db.exec(statement); } catch { /* Existing column. */ }
   }
@@ -1042,6 +1046,7 @@ export async function saveStoredLearningBehavior(input: {
   knowledge: string;
   source: string;
   weight: number;
+  correct?: boolean;
 }) {
   const owner = input.owner.trim().toLowerCase() || "__anonymous__";
   const now = Date.now();
@@ -1049,17 +1054,54 @@ export async function saveStoredLearningBehavior(input: {
   if (usePostgres()) {
     await ensurePgSchema();
     await getPg().query(`
-      INSERT INTO learning_behaviors (id, owner, subject, knowledge, source, weight, created_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-    `, [id, owner, input.subject, input.knowledge, input.source, input.weight, now]);
+      INSERT INTO learning_behaviors (id, owner, subject, knowledge, source, weight, correct, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `, [id, owner, input.subject, input.knowledge, input.source, input.weight, input.correct ?? null, now]);
     return;
   }
   getDb().prepare(`
-    INSERT INTO learning_behaviors (id, owner, subject, knowledge, source, weight, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(id, owner, input.subject, input.knowledge, input.source, input.weight, now);
+    INSERT INTO learning_behaviors (id, owner, subject, knowledge, source, weight, correct, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, owner, input.subject, input.knowledge, input.source, input.weight, input.correct == null ? null : (input.correct ? 1 : 0), now);
 }
 
+export async function getStoredLearningBehaviors(ownerInput: string, since = 0, limit = 500): Promise<Array<{
+  subject: string;
+  knowledge: string;
+  source: string;
+  weight: number;
+  correct?: boolean;
+  createdAt: number;
+}>> {
+  const owner = ownerInput.trim().toLowerCase() || "__anonymous__";
+  const mapRow = (row: Record<string, unknown>) => ({
+    subject: String(row.subject || ""),
+    knowledge: String(row.knowledge || ""),
+    source: String(row.source || ""),
+    weight: Number(row.weight || 0),
+    correct: row.correct == null ? undefined : [true, 1, "true", "1"].includes(row.correct as never),
+    createdAt: Number(row.created_at || 0)
+  });
+  if (usePostgres()) {
+    await ensurePgSchema();
+    const rows = await getPg().query(`
+      SELECT subject, knowledge, source, weight, correct, created_at
+      FROM learning_behaviors
+      WHERE owner = $1 AND created_at >= $2
+      ORDER BY created_at DESC
+      LIMIT $3
+    `, [owner, since, limit]) as Array<Record<string, unknown>>;
+    return rows.map(mapRow);
+  }
+  const rows = getDb().prepare(`
+    SELECT subject, knowledge, source, weight, correct, created_at
+    FROM learning_behaviors
+    WHERE owner = ? AND created_at >= ?
+    ORDER BY created_at DESC
+    LIMIT ?
+  `).all(owner, since, limit) as Array<Record<string, unknown>>;
+  return rows.map(mapRow);
+}
 export async function getStoredLearningBehaviorWeight(input: {
   owner: string;
   subject: string;
