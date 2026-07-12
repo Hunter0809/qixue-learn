@@ -4,27 +4,9 @@ import { logAgentResponse } from "@/lib/server-logger";
 
 const DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1";
 const DEEPSEEK_MODEL = "deepseek-chat";
-const DEEPSEEK_STREAM_TIMEOUT_MS = Number(process.env.DEEPSEEK_STREAM_TIMEOUT_MS || 90000);
+const DEEPSEEK_STREAM_TIMEOUT_MS = Number(process.env.DEEPSEEK_STREAM_TIMEOUT_MS || 60000);
 const DEEPSEEK_MAX_TOKENS = Number(process.env.DEEPSEEK_MAX_TOKENS || 8192);
 const DEEPSEEK_JSON_MODE = process.env.DEEPSEEK_JSON_MODE === "1";
-let deepSeekQueueTail: Promise<void> = Promise.resolve();
-
-async function acquireDeepSeekQueueSlot() {
-  let releaseSlot!: () => void;
-  const slot = new Promise<void>((resolve) => {
-    releaseSlot = resolve;
-  });
-  const previous = deepSeekQueueTail;
-  deepSeekQueueTail = previous.catch(() => undefined).then(() => slot);
-  await previous.catch(() => undefined);
-  let released = false;
-  return () => {
-    if (released) return;
-    released = true;
-    releaseSlot();
-  };
-}
-
 function requireDeepSeekKey(): string {
   const key = process.env.DEEPSEEK_API_KEY;
   if (!key) throw new Error("Missing DEEPSEEK_API_KEY environment variable");
@@ -33,7 +15,7 @@ function requireDeepSeekKey(): string {
 
 function createDeepSeekRequestSignal(signal?: AbortSignal) {
   const controller = new AbortController();
-  const timeoutMs = Number.isFinite(DEEPSEEK_STREAM_TIMEOUT_MS) && DEEPSEEK_STREAM_TIMEOUT_MS > 0 ? DEEPSEEK_STREAM_TIMEOUT_MS : 90000;
+  const timeoutMs = Number.isFinite(DEEPSEEK_STREAM_TIMEOUT_MS) && DEEPSEEK_STREAM_TIMEOUT_MS > 0 ? DEEPSEEK_STREAM_TIMEOUT_MS : 60000;
   const timeout = setTimeout(() => controller.abort(new Error("DeepSeek request timed out")), timeoutMs);
   const abort = () => controller.abort(signal?.reason);
   signal?.addEventListener("abort", abort, { once: true });
@@ -52,9 +34,8 @@ export async function streamDeepSeek(
   options: { jsonObject?: boolean } = {}
 ): Promise<ReadableStream<string>> {
   const apiKey = requireDeepSeekKey();
-  const releaseQueueSlot = await acquireDeepSeekQueueSlot();
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), Number.isFinite(DEEPSEEK_STREAM_TIMEOUT_MS) && DEEPSEEK_STREAM_TIMEOUT_MS > 0 ? DEEPSEEK_STREAM_TIMEOUT_MS : 90000);
+  const timeout = setTimeout(() => controller.abort(), Number.isFinite(DEEPSEEK_STREAM_TIMEOUT_MS) && DEEPSEEK_STREAM_TIMEOUT_MS > 0 ? DEEPSEEK_STREAM_TIMEOUT_MS : 60000);
   const abort = () => controller.abort(signal?.reason);
   signal?.addEventListener("abort", abort, { once: true });
   const cleanup = () => {
@@ -81,18 +62,20 @@ export async function streamDeepSeek(
     });
   } catch (error) {
     cleanup();
-    releaseQueueSlot();
     throw error;
   }
 
   if (!response.ok) {
     const text = await response.text();
     cleanup();
-    releaseQueueSlot();
     throw new Error(`DeepSeek API error ${response.status}: ${text}`);
   }
 
-  const reader = response.body!.getReader();
+  if (!response.body) {
+    cleanup();
+    throw new Error("DeepSeek API returned empty response body");
+  }
+  const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let closed = false;
@@ -110,7 +93,6 @@ export async function streamDeepSeek(
           if (done) {
             closed = true;
             cleanup();
-            releaseQueueSlot();
             controller.close();
             return;
           }
@@ -125,7 +107,6 @@ export async function streamDeepSeek(
             if (data === "[DONE]") {
               closed = true;
               cleanup();
-              releaseQueueSlot();
               break;
             }
             try {
@@ -149,14 +130,12 @@ export async function streamDeepSeek(
       } catch (error) {
         closed = true;
         cleanup();
-        releaseQueueSlot();
         controller.error(error);
       }
     },
     async cancel() {
       closed = true;
       cleanup();
-      releaseQueueSlot();
       await reader.cancel();
     }
   });
@@ -186,7 +165,6 @@ export async function askDeepSeekStreamCollect<T>(
   ];
 
   const apiKey = requireDeepSeekKey();
-  const releaseQueueSlot = await acquireDeepSeekQueueSlot();
   const requestSignal = createDeepSeekRequestSignal(signal);
   let fullText = "";
   try {
@@ -214,7 +192,6 @@ export async function askDeepSeekStreamCollect<T>(
     fullText = payload.choices?.[0]?.message?.content || "";
   } finally {
     requestSignal.cleanup();
-    releaseQueueSlot();
   }
   if (logModule) await logAgentResponse(logModule, { raw: fullText });
   const extracted = extractJsonFromText(fullText);

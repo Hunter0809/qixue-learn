@@ -33,14 +33,15 @@ const resourceSpecs = [
 async function generateResourceWithRetry(
   task: string,
   context: unknown,
-  retries = 3,
-  logModule = "resource"
+  retries = 1,
+  logModule = "resource",
+  signal?: AbortSignal
 ): Promise<z.infer<typeof resourceSchema>> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const strictTask = `${task}\nStability requirement: attempt ${attempt}/${retries}. Return exactly one JSON object that validates against the provided schema. Do not omit required fields, do not return Markdown, and do not include commentary.`;
-      return await askDeepSeekStreamCollect(strictTask, resourceSchema, context, logModule);
+      return await askDeepSeekStreamCollect(strictTask, resourceSchema, context, logModule, signal);
     } catch (error) {
       lastError = error;
       if (attempt === retries) break;
@@ -60,6 +61,8 @@ export async function POST(request: Request) {
     if (stored.length > 0) {
       return resourceResponseSchema.parse({ resources: stored });
     }
+    const timeoutMs = Number(process.env.RESOURCE_GENERATION_TIMEOUT_MS || 45000);
+    const resourceSignal = AbortSignal.timeout(Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 45000);
     const today = new Date();
     const profileText = [
       body.profile?.region ? `地区：${body.profile.region}` : "",
@@ -69,9 +72,7 @@ export async function POST(request: Request) {
       `当前日期：${today.toISOString().slice(0, 10)}`,
       `学习时段：${semesterPhase(today)}`
     ].filter(Boolean).join("；");
-    const resources = [];
-
-    for (const [index, spec] of resourceSpecs.entries()) {
+    const resources = await Promise.all(resourceSpecs.map(async (spec, index) => {
       const generated = await generateResourceWithRetry(
         [
           "Resource Agent: 根据教材目录数据库中的知识点生成一张完整学习资源卡片。",
@@ -91,17 +92,18 @@ export async function POST(request: Request) {
           "必须返回且只返回 JSON。"
         ].join("\n"),
         { ...body, knowledge, type: spec.type, focus: spec.focus, titleHint: spec.titleHint },
-        3,
-        "resource"
+        1,
+        "resource",
+        resourceSignal
       );
-      resources.push({
+      return {
         ...generated,
         id: `${spec.type}_${index + 1}_${knowledge}`,
         subject,
         type: spec.type,
         knowledge
-      });
-    }
+      };
+    }));
 
     const response = resourceResponseSchema.parse({ resources });
     await saveStoredResources(response.resources, body.profile, body.owner);

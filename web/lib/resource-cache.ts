@@ -1,6 +1,7 @@
 "use client";
 
 import type { Resource } from "@/lib/types";
+import { emitServiceWarning } from "@/lib/client-warning";
 import { getLearnerProfile, loadCurrentUsername } from "@/lib/profile-storage";
 
 const CACHE_KEY = "qixue_resource_cache";
@@ -176,15 +177,20 @@ export async function preGenerateResources(knowledge: string, subject: string): 
       body: JSON.stringify({ owner: loadCurrentUsername() || undefined, knowledge: requestKnowledge, type: "lecture", style: "plain", profile: getLearnerProfile() })
     });
     if (!resp.ok) {
+      emitServiceWarning("请求链路异常：个性资源服务没有返回有效结果，请稍后重试。");
       markFailed(requestKnowledge);
       return;
     }
     const data = await resp.json();
-    if (data.resources) {
+    if (Array.isArray(data.resources) && data.resources.length > 0) {
       setCachedResources(requestKnowledge, data.resources as Resource[]);
       clearFailed(requestKnowledge);
+    } else {
+      emitServiceWarning("请求链路异常：个性资源服务返回空结果，请稍后重试。");
+      markFailed(requestKnowledge);
     }
   } catch (error) {
+    emitServiceWarning("请求链路异常：个性资源服务无法连接，请检查网络或稍后重试。");
     markFailed(requestKnowledge);
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("qixue:resources-error", { detail: { knowledge: requestKnowledge, error } }));
