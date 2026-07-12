@@ -587,6 +587,7 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
   const [content, setContent] = useState(storeSnapshot.content || "");
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [weakPointTick, setWeakPointTick] = useState(0);
+  const [hydrated, setHydrated] = useState(false);
   const storeWeakPoints = getWeakPoints();
   const [pendingRequest, setPendingRequest] = useState<HomeworkRequest | null>(storeSnapshot.pendingRequest || null);
   const [imageUrl, setImageUrl] = useState<string | null>(storeSnapshot.imageUrl || null);
@@ -616,6 +617,8 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
     `/api/homework/${config.feature}`,
     (_url: string, { arg }: { arg: HomeworkRequest }) => postJson<HomeworkResponse, HomeworkRequest>("/api/homework", arg)
   );
+
+  useEffect(() => setHydrated(true), []);
 
   const displayData = data || storeSnapshot.data;
   const effectiveMutating = isMutating || storeSnapshot.isMutating;
@@ -1007,7 +1010,7 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
   }, []);
 
   return (
-    <section className={`feature-screen feature-screen-${mode}`}>
+    <section className={`feature-screen feature-screen-${mode}`} data-feature-hydrated={hydrated ? "true" : "false"}>
       <section className={`feature-workspace feature-workspace-${mode}`}>
         <form className={`feature-composer feature-composer-${mode}`} onSubmit={submit}>
           <div className="composer-head">
