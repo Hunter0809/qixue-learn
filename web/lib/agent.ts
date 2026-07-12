@@ -7,24 +7,6 @@ export type AgentMessage = {
   content: string | AgentContentPart[];
 };
 
-let agentQueueTail: Promise<void> = Promise.resolve();
-
-async function acquireAgentQueueSlot() {
-  let releaseSlot!: () => void;
-  const slot = new Promise<void>((resolve) => {
-    releaseSlot = resolve;
-  });
-  const previous = agentQueueTail;
-  agentQueueTail = previous.catch(() => undefined).then(() => slot);
-  await previous.catch(() => undefined);
-  let released = false;
-  return () => {
-    if (released) return;
-    released = true;
-    releaseSlot();
-  };
-}
-
 function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value || value.startsWith("replace-with-")) throw new Error(`Missing required environment variable: ${name}`);
@@ -33,7 +15,7 @@ function requireEnv(name: string): string {
 
 function agentTimeoutMs(isVision: boolean) {
   const raw = isVision
-    ? (process.env.AGENT_VISION_TIMEOUT_MS || 180000)
+    ? (process.env.AGENT_VISION_TIMEOUT_MS || 60000)
     : (process.env.AGENT_API_TIMEOUT_MS || 60000);
   const parsed = Number(raw);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 60000;
@@ -131,7 +113,6 @@ export async function streamAgent(
   const model = isVision
     ? (process.env.AGENT_VISION_MODEL || "mimo-v2.5")
     : (process.env.AGENT_MODEL || "mimo-v2.5");
-  const releaseQueueSlot = await acquireAgentQueueSlot();
   let response: Response;
   const requestSignal = createRequestSignal(agentTimeoutMs(isVision), signal);
   try {
@@ -144,10 +125,13 @@ export async function streamAgent(
     if (!response.ok) { const t = await response.text(); throw new Error("Agent API error " + response.status + ": " + t); }
   } catch (error) {
     requestSignal.cleanup();
-    releaseQueueSlot();
     throw error;
   }
-  const reader = response.body!.getReader();
+  if (!response.body) {
+    requestSignal.cleanup();
+    throw new Error("Agent API returned empty response body");
+  }
+  const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let closed = false;
@@ -165,7 +149,6 @@ export async function streamAgent(
           if (done) {
             closed = true;
             requestSignal.cleanup();
-            releaseQueueSlot();
             controller.close();
             return;
           }
@@ -180,7 +163,6 @@ export async function streamAgent(
             if (data === "[DONE]") {
               closed = true;
               requestSignal.cleanup();
-              releaseQueueSlot();
               break;
             }
             try {
@@ -204,14 +186,12 @@ export async function streamAgent(
       } catch (error) {
         closed = true;
         requestSignal.cleanup();
-        releaseQueueSlot();
         controller.error(error);
       }
     },
     async cancel() {
       closed = true;
       requestSignal.cleanup();
-      releaseQueueSlot();
       await reader.cancel();
     }
   });

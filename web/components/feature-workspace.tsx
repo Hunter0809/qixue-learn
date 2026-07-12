@@ -708,6 +708,8 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
     }).catch((requestError) => {
 
       const message = requestError instanceof Error ? requestError.message : "生成失败";
+      const aborted = requestError instanceof DOMException && requestError.name === "AbortError";
+      if (!aborted) emitServiceWarning("请求链路异常：功能服务没有在规定时间内返回结果，请稍后重试。");
       setStoreState(workspaceFeature, { isMutating: false, error: message, pendingRequest: request });
     });
   }
