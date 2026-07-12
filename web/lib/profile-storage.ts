@@ -1,6 +1,6 @@
 "use client";
 
-import type { DifficultyPreference, HomeworkRequest, HomeworkResponse, LearnerProfile } from "@/lib/types";
+import type { DifficultyPreference, HomeworkRequest, HomeworkResponse, LearnerProfile, ResourceType } from "@/lib/types";
 
 const USERS_KEY = "qixue_users";
 const CURRENT_USER_KEY = "qixue_current_user";
@@ -248,7 +248,7 @@ function applyRemoteArchive(owner: string, archive: {
   resources?: Array<{
     id: string;
     title: string;
-    type: "lecture" | "exercise" | "diagram" | "analogy";
+    type: ResourceType;
     subject?: string;
     knowledge: string;
     difficulty: "easy" | "medium" | "hard";

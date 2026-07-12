@@ -27,11 +27,15 @@ export function knowledgeName(knowledge: string, subject = subjectFromKnowledge(
     .trim() || knowledge;
 }
 
-function typeLabel(type: Resource["type"]) {
-  if (type === "lecture") return "核心概念";
-  if (type === "exercise") return "巩固题目";
-  if (type === "diagram") return "图解";
-  return "类比";
+export function resourceTypeLabel(type: Resource["type"]) {
+  if (type === "lecture") return "课程讲解";
+  if (type === "exercise") return "题库练习";
+  if (type === "diagram") return "思维导图";
+  if (type === "analogy") return "类比解释";
+  if (type === "reading") return "拓展阅读";
+  if (type === "video") return "视频脚本";
+  if (type === "animation") return "动画分镜";
+  return "代码实操";
 }
 
 function difficultyLabel(difficulty: Resource["difficulty"]) {
@@ -154,7 +158,7 @@ export function ResourceCard({ resource, showContent = false, onDelete, parentGr
           <span className="resource-card-subline">
             <span className="resource-meta">
               <span className="pill">{subject}</span>
-              <span className="pill">{typeLabel(resource.type)}</span>
+              <span className="pill">{resourceTypeLabel(resource.type)}</span>
               <span className="pill">{difficultyLabel(resource.difficulty)}</span>
             </span>
           </span>

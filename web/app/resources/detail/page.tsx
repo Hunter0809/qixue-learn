@@ -4,12 +4,22 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { MarkdownRenderer } from "@/components/markdown-renderer";
-import { knowledgeName, resourceGroupKey, resourceSubject } from "@/components/resource-card";
+import { knowledgeName, resourceGroupKey, resourceSubject, resourceTypeLabel } from "@/components/resource-card";
 import { getLearnerProfile, loadCurrentUsername } from "@/lib/profile-storage";
 import type { Resource, ResourceResponse } from "@/lib/types";
 
 const REQUIRED_SECTIONS = ["知识点", "核心解释", "相关课程", "例题（含答案）", "练习题"];
 
+const ARTIFACT_SECTIONS: Record<string, string[]> = {
+  lecture: ["课程讲解"],
+  diagram: ["思维导图"],
+  exercise: ["题库与解析"],
+  analogy: ["类比解释"],
+  reading: ["拓展阅读"],
+  video: ["视频脚本", "分镜"],
+  animation: ["动画分镜", "交互说明"],
+  code: ["实操案例", "代码", "验证结果"]
+};
 function hasDetailedContent(resource: Resource | null) {
   const content = resource?.content || "";
   return REQUIRED_SECTIONS.every((section) => content.includes(`## ${section}`));
@@ -31,6 +41,26 @@ function DetailSection({ title, children }: { title: string; children: React.Rea
   );
 }
 
+function ResourceArtifactSections({ resource }: { resource: Resource }) {
+  const sections = ARTIFACT_SECTIONS[resource.type] || [];
+  if (sections.length === 0) return null;
+  return (
+    <div className="resource-artifact-stack">
+      {sections.map((section) => {
+        const content = sectionFromContent(resource.content, section);
+        return (
+          <DetailSection key={section} title={section}>
+            {content ? (
+              <MarkdownRenderer text={content} boldAsSubheading />
+            ) : (
+              <p className="warning-copy">该资源未返回“{section}”专属产物，请重新生成资源。</p>
+            )}
+          </DetailSection>
+        );
+      })}
+    </div>
+  );
+}
 function ResourceDetailContent() {
   const params = useSearchParams();
   const id = params.get("id") || "";
@@ -91,7 +121,7 @@ function ResourceDetailContent() {
             {generating ? <p className="pill">正在补全知识点、例题和练习题内容</p> : null}
             <div className="resource-meta">
               <span className="pill">{resource.knowledge}</span>
-              <span className="pill">{resource.type === "lecture" ? "讲义" : resource.type === "exercise" ? "练习" : resource.type === "diagram" ? "图解" : "类比"}</span>
+              <span className="pill">{resourceTypeLabel(resource.type)}</span>
               <span className="pill">{resource.difficulty === "easy" ? "基础" : resource.difficulty === "medium" ? "同步" : "提高"}</span>
             </div>
             <DetailSection title="知识点">
@@ -109,6 +139,7 @@ function ResourceDetailContent() {
             <DetailSection title="练习题">
               <MarkdownRenderer text={sectionFromContent(resource.content, "练习题") || "正在生成练习题。"} boldAsSubheading />
             </DetailSection>
+            <ResourceArtifactSections resource={resource} />
           </div>
         ) : (
           <p className="muted">未找到该资源详情，请从个性资源卡片重新进入。</p>
@@ -126,3 +157,4 @@ export default function ResourceDetailPage() {
     </Suspense>
   );
 }
+

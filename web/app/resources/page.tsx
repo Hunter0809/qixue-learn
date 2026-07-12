@@ -39,6 +39,7 @@ function ResourcesContent() {
   const [filter, setFilter] = useState<ResourceRequest>(saved);
   const [page, setPage] = useState(0);
   const [feedResources, setFeedResources] = useState<Resource[]>([]);
+  const [agentTraces, setAgentTraces] = useState<ResourceResponse["agents"]>([]);
   const [loginOpen, setLoginOpen] = useState(false);
   const [canUsePersonalizedResources, setCanUsePersonalizedResources] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
@@ -112,6 +113,7 @@ function ResourcesContent() {
     const request = { ...filter, owner: loadCurrentUsername() || undefined, profile: getLearnerProfile() };
     void trigger(request).then((response) => {
       if (response?.resources?.length) {
+        setAgentTraces(response.agents || []);
         setCachedResources(request.knowledge, response.resources);
         setFeedResources(getResourceFeed());
         setPage(0);
@@ -167,6 +169,10 @@ function ResourcesContent() {
             <option value="exercise">练习题</option>
             <option value="diagram">图解</option>
             <option value="analogy">类比解释</option>
+            <option value="reading">拓展阅读</option>
+            <option value="video">视频脚本</option>
+            <option value="animation">动画分镜</option>
+            <option value="code">代码实操</option>
           </select>
         </div>
         <div className="field">
@@ -181,6 +187,26 @@ function ResourcesContent() {
           <Wand2 size={16} /> {isMutating ? "生成中" : "生成资源"}
         </button>
       </form>
+
+      {agentTraces?.length ? (
+        <section className="section card agent-trace-panel">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">Multi-Agent Orchestration</span>
+              <h2 className="card-title">本次资源协同轨迹</h2>
+            </div>
+            <span className="pill">{agentTraces.length} 个专职 Agent</span>
+          </div>
+          <div className="agent-trace-grid">
+            {agentTraces.map((trace) => (
+              <div className="agent-trace-card" key={trace.agentId}>
+                <strong>{trace.role}</strong>
+                <span className="muted">{trace.artifactType} · {trace.status === "cache_hit" ? "命中缓存" : `已完成${trace.latencyMs ? ` · ${trace.latencyMs}ms` : ""}`}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="section">
         <div className="resource-breadcrumb">

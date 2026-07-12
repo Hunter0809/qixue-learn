@@ -16,10 +16,12 @@ export type WeakPoint = {
   severity: number;
 };
 
+export type ResourceType = "lecture" | "exercise" | "diagram" | "analogy" | "reading" | "video" | "animation" | "code";
+
 export type Resource = {
   id: string;
   title: string;
-  type: "lecture" | "exercise" | "diagram" | "analogy";
+  type: ResourceType;
   subject?: string;
   knowledge: string;
   difficulty: "easy" | "medium" | "hard";
@@ -105,8 +107,17 @@ export type ResourceRequest = {
   profile?: LearnerProfile;
 };
 
+export type ResourceAgentTrace = {
+  agentId: string;
+  role: string;
+  artifactType: ResourceType;
+  status: "completed" | "cache_hit";
+  latencyMs?: number;
+};
+
 export type ResourceResponse = {
   resources: Resource[];
+  agents?: ResourceAgentTrace[];
 };
 
 export type MistakeAnalysis = {
