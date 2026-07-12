@@ -237,6 +237,15 @@ export async function preGenerateReviewPlanForSubject(subject: string, points: W
   writeGenerating(generating);
   window.dispatchEvent(new CustomEvent("qixue:review-plan-generating", { detail: { subject } }));
 
+  const handlePageHide = () => {
+    const current = readGenerating();
+    if (current[subject]?.signature === signature) {
+      delete current[subject];
+      writeGenerating(current);
+    }
+  };
+  window.addEventListener("pagehide", handlePageHide, { once: true });
+
   try {
     const resp = await fetch("/api/plan", {
       method: "POST",
@@ -259,8 +268,10 @@ export async function preGenerateReviewPlanForSubject(subject: string, points: W
       notifyReviewPlanState(subject, { error: await resp.text() });
       return;
     }
+    if (readGenerating()[subject]?.signature !== signature) return;
     const plan = await resp.json() as PlanResponse;
     if (!plan.planId || !Array.isArray(plan.days)) {
+      emitServiceWarning("请求链路异常：复习计划服务返回内容不完整，请稍后重试。");
       markFailed(subject, signature);
       notifyReviewPlanState(subject, { error: "invalid-plan" });
       return;
@@ -271,14 +282,20 @@ export async function preGenerateReviewPlanForSubject(subject: string, points: W
     clearFailed(subject);
     notifyReviewPlanState(subject, { plan });
   } catch (error) {
+    const aborted = error instanceof DOMException && error.name === "AbortError";
+    const pageUnloading = typeof document !== "undefined" && document.visibilityState === "hidden";
+    if (aborted || pageUnloading) return;
     emitServiceWarning("请求链路异常：复习计划服务无法连接，请检查网络或稍后重试。");
     markFailed(subject, signature);
     notifyReviewPlanState(subject, { error: error instanceof Error ? error.message : "request-failed" });
   } finally {
+    window.removeEventListener("pagehide", handlePageHide);
     const nextGenerating = readGenerating();
-    delete nextGenerating[subject];
-    writeGenerating(nextGenerating);
-    notifyReviewPlanState(subject, { generating: false });
+    if (nextGenerating[subject]?.signature === signature) {
+      delete nextGenerating[subject];
+      writeGenerating(nextGenerating);
+      notifyReviewPlanState(subject, { generating: false });
+    }
   }
 }
 
