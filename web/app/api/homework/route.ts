@@ -118,14 +118,8 @@ async function withAgentExamples(entries: StoredDictionaryEntry[], subject: stri
       "word_lookup_examples"
     );
     return entries.map((entry, index) => index === 0 ? { ...entry, examples: generated.examples } : entry);
-  } catch {
-    return entries.map((entry, index) => index === 0 ? {
-      ...entry,
-      examples: [
-        `${entry.term} is useful in daily study and review.`,
-        `Please make one sentence with "${entry.term}" and explain its meaning.`
-      ]
-    } : entry);
+  } catch (error) {
+    throw new Error("Dictionary example agent unavailable", { cause: error });
   }
 }
 
@@ -146,10 +140,7 @@ function stripSubjectPrefix(value: string, subject: string) {
     }
   });
   return next;
-  return value
-    .replace(new RegExp(`^\\s*${normalizedSubject}\\s*[:：\\-—]*\\s*`), "")
-    .replace(new RegExp(`^\\s*${subject}\\s*[:：\\-—]*\\s*`), "")
-    .trim();
+
 }
 
 function addKnowledgeCandidate(map: Map<string, string>, raw: string, subject: string, grade?: string) {
