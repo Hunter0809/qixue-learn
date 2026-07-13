@@ -20,7 +20,7 @@ import {
 } from "@/components/resource-card";
 import { LoginModal } from "@/components/login-modal";
 import { ConfirmPopup, type ConfirmAction } from "@/components/confirm-popup";
-import { getLearnerProfile, isGuestSession, loadCurrentUserProfile, loadCurrentUsername, logoutUser } from "@/lib/profile-storage";
+import { getLearnerProfile, isGuestSession, loadCurrentUsername, logoutUser } from "@/lib/profile-storage";
 
 function mergeResources(primary: Resource[], secondary: Resource[]) {
   const map = new Map<string, Resource>();
@@ -41,7 +41,7 @@ function ResourcesContent() {
   const [feedResources, setFeedResources] = useState<Resource[]>([]);
   const [agentTraces, setAgentTraces] = useState<ResourceResponse["agents"]>([]);
   const [loginOpen, setLoginOpen] = useState(false);
-  const [canUsePersonalizedResources, setCanUsePersonalizedResources] = useState(() => Boolean(loadCurrentUserProfile()) && !isGuestSession());
+  const [canUsePersonalizedResources, setCanUsePersonalizedResources] = useState(() => Boolean(loadCurrentUsername()) && !isGuestSession());
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const { trigger, data, error, isMutating } = useSWRMutation(
     "/api/resource",
@@ -78,7 +78,7 @@ function ResourcesContent() {
     setPage(0);
   }
   useEffect(() => {
-    setCanUsePersonalizedResources(Boolean(loadCurrentUserProfile()) && !isGuestSession());
+    setCanUsePersonalizedResources(Boolean(loadCurrentUsername()) && !isGuestSession());
     setFeedResources(getResourceFeed());
 
     function reloadFeed() {
@@ -269,7 +269,7 @@ function ResourcesContent() {
       {loginOpen ? (
         <LoginModal
           onClose={() => setLoginOpen(false)}
-          onDone={() => { setLoginOpen(false); setCanUsePersonalizedResources(Boolean(loadCurrentUserProfile()) && !isGuestSession()); setFeedResources(getResourceFeed()); }}
+          onDone={() => { setLoginOpen(false); setCanUsePersonalizedResources(Boolean(loadCurrentUsername()) && !isGuestSession()); setFeedResources(getResourceFeed()); }}
         />
       ) : null}
       {confirmAction ? (
