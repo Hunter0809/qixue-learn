@@ -242,7 +242,7 @@ export default function ProfilePage() {
       </header>
 
       <section className="section profile-grid">
-        <article className="card profile-panel">
+        <article className="card profile-panel profile-personal-panel">
           <div className="panel-heading">
             <h2 className="card-title">个人信息</h2>
             {editing ? (

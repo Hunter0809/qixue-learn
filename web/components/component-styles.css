@@ -500,6 +500,7 @@
 }
 
 
+.profile-personal-panel,
 .profile-dialog-panel {
   grid-column: 1 / -1;
 }
