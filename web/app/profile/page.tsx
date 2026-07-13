@@ -21,6 +21,7 @@ import {
   cityFromRegion,
   schoolsForRegionAndGrade,
   stageForGrade,
+  syncUserArchiveFromBackend,
   updateCurrentUserProfile,
   type LearningHistoryRecord,
   type StoredUser
@@ -99,7 +100,11 @@ export default function ProfilePage() {
     setHistory(loadLearningHistory());
   }
 
-  useEffect(() => refresh(), []);
+  useEffect(() => {
+    refresh();
+    const owner = loadCurrentUsername();
+    if (owner) void syncUserArchiveFromBackend(owner).then(refresh);
+  }, []);
   async function sendProfileMessage(event: React.FormEvent) {
     event.preventDefault();
     const message = profileMessage.trim();

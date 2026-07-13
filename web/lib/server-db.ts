@@ -678,7 +678,7 @@ export async function getStoredResources(knowledge: string, profile?: unknown, o
     const rows = await getPg().query(`
       SELECT id, title, type, subject, knowledge, difficulty, summary, content
       FROM resources
-      WHERE knowledge = $1 AND (profile_key = $2 OR profile_key = '')
+      WHERE knowledge = $1 AND type IN ('lecture', 'exercise', 'diagram', 'analogy', 'reading', 'code') AND (profile_key = $2 OR profile_key = '')
       ORDER BY CASE WHEN profile_key = $2 THEN 0 ELSE 1 END, updated_at DESC
       LIMIT 12
     `, [knowledge, key]) as Array<Record<string, string>>;
@@ -699,7 +699,7 @@ export async function getStoredResources(knowledge: string, profile?: unknown, o
   const rows = database.prepare(`
     SELECT id, title, type, subject, knowledge, difficulty, summary, content
     FROM resources
-    WHERE knowledge = ? AND (profile_key = ? OR profile_key = '')
+    WHERE knowledge = ? AND type IN ('lecture', 'exercise', 'diagram', 'analogy', 'reading', 'code') AND (profile_key = ? OR profile_key = '')
     ORDER BY CASE WHEN profile_key = ? THEN 0 ELSE 1 END, updated_at DESC
     LIMIT 12
   `).all(knowledge, key, key) as Array<Record<string, string>>;
@@ -783,7 +783,7 @@ export async function getStoredResourceFeed(limit = 80, owner = ""): Promise<Res
     const rows = await getPg().query(`
       SELECT id, title, type, subject, knowledge, difficulty, summary, content
       FROM resources
-      WHERE ($2 = '' OR profile_key = $2 OR profile_key LIKE ($2 || '|%') OR profile_key = '')
+      WHERE type IN ('lecture', 'exercise', 'diagram', 'analogy', 'reading', 'code') AND ($2 = '' OR profile_key = $2 OR profile_key LIKE ($2 || '|%') OR profile_key = '')
       ORDER BY updated_at DESC
       LIMIT $1
     `, [limit, key]) as Array<Record<string, string>>;
@@ -803,7 +803,7 @@ export async function getStoredResourceFeed(limit = 80, owner = ""): Promise<Res
   const rows = getDb().prepare(`
     SELECT id, title, type, subject, knowledge, difficulty, summary, content
     FROM resources
-    WHERE (? = '' OR profile_key = ? OR profile_key LIKE (? || '|%') OR profile_key = '')
+    WHERE type IN ('lecture', 'exercise', 'diagram', 'analogy', 'reading', 'code') AND (? = '' OR profile_key = ? OR profile_key LIKE (? || '|%') OR profile_key = '')
     ORDER BY updated_at DESC
     LIMIT ?
   `).all(key, key, limit) as Array<Record<string, string>>;

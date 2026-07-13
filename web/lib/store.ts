@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import type { HomeworkFeature, HomeworkRequest, HomeworkResponse, PlanResponse, ProfileResponse, QuizSubmitResponse, ResourceRequest } from "@/lib/types";
 import { canonicalizeKnowledge, classifyKnowledgeFromText, normalizeSubject } from "@/lib/knowledge-catalog";
-import { getLearnerProfile, isGuestSession, loadCurrentUserProfile, loadCurrentUsername } from "@/lib/profile-storage";
+import { getLearnerProfile, isGuestSession, loadCurrentUserProfile, loadCurrentUsername, recordLearningBehaviorInProfile } from "@/lib/profile-storage";
 
 type WorkspaceSnapshot = {
   content: string;
@@ -322,6 +322,7 @@ export function addWeakPoint(knowledge: string, subject: string, source: string,
   }
   const activePoints = points.filter((point) => point.weight > 0 || point.masteryProgress > 0);
   saveWeakPoints(activePoints);
+  recordLearningBehaviorInProfile({ subject: normalizedSubject, knowledge: normalizedKnowledge, source, correct });
   if (typeof window !== "undefined") {
     const persisted = activePoints.find((point) => point.subject === normalizedSubject && point.knowledge === normalizedKnowledge);
     if (persisted) {
@@ -343,7 +344,6 @@ export function addWeakPoint(knowledge: string, subject: string, source: string,
     window.dispatchEvent(new CustomEvent("qixue:weak-point-updated", { detail: { knowledge: normalizedKnowledge, subject: normalizedSubject, source, correct } }));
   }
   if (typeof window !== "undefined" && !correct && activePoints.some((point) => point.subject === normalizedSubject && point.knowledge === normalizedKnowledge && point.weight >= WEAK_POINT_THRESHOLD)) {
-    void import("@/lib/resource-cache").then((module) => module.preGenerateResources(normalizedKnowledge, normalizedSubject));
     void import("@/lib/review-plan-cache").then((module) => module.preGenerateReviewPlanForSubject(
       normalizedSubject,
       activePoints.filter((point) => point.subject === normalizedSubject)

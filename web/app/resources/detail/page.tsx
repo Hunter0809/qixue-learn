@@ -16,8 +16,6 @@ const ARTIFACT_SECTIONS: Record<string, string[]> = {
   exercise: ["题库与解析"],
   analogy: ["类比解释"],
   reading: ["拓展阅读"],
-  video: ["视频脚本", "分镜"],
-  animation: ["动画分镜", "交互说明"],
   code: ["实操案例", "代码", "验证结果"]
 };
 function hasDetailedContent(resource: Resource | null) {

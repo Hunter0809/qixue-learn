@@ -136,6 +136,47 @@ test.describe("启学智伴全模块真实交互", () => {
   });
 });
 
+test("搜题行为驱动主页薄弱点、推荐资源与个人画像", async ({ page }) => {
+  const owner = `behavior_flow_e2e_${Date.now()}`;
+  await page.goto(`${baseUrl}/login?next=/`, { waitUntil: "domcontentloaded" });
+  await page.getByLabel("用户名").fill(owner);
+  await page.getByRole("button", { name: "下一步" }).click();
+  await page.getByRole("textbox", { name: "昵称" }).fill("行为链路测试用户");
+  await page.getByRole("button", { name: "完成注册" }).click();
+
+  await page.getByRole("link", { name: "拍照搜题", exact: true }).click();
+  await expect(page.locator("[data-feature-hydrated]")).toHaveAttribute("data-feature-hydrated", "true", { timeout: 30_000 });
+  await page.locator('input[type="file"]').setInputFiles(mathImage);
+  await expect(page.locator(".crop-image")).toBeVisible({ timeout: 30_000 });
+  const crop = page.locator(".crop-image-wrap");
+  const box = await crop.boundingBox();
+  if (!box) throw new Error("拍照搜题裁剪区域不可用");
+  await page.mouse.move(box.x + 12, box.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(box.x + Math.min(180, box.width - 12), box.y + Math.min(140, box.height - 12));
+  await page.mouse.up();
+  const searchStartedAt = Date.now();
+  await page.getByRole("button", { name: "裁剪并分析" }).click();
+  await expect(page.locator(".processing-label")).toHaveCount(0, { timeout: 120_000 });
+  const searchLatencyMs = Date.now() - searchStartedAt;
+  console.log(`PHOTO_SEARCH_E2E_LATENCY_MS=${searchLatencyMs}`);
+  expect(searchLatencyMs, "拍照搜题端到端返回超过 15 秒").toBeLessThanOrEqual(15_000);
+  await expect(page.locator(".service-warning-modal")).toHaveCount(0);
+  await expect(page.locator(".feature-output")).toContainText("答案结论");
+
+  await page.getByRole("link", { name: "首页", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "薄弱知识点" })).toBeVisible();
+  await expect(page.locator(".weak-point-line:not(.weak-point-placeholder)").first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".resource-list-fill .resource-card-link").first()).toBeVisible({ timeout: 120_000 });
+
+  await page.getByRole("button", { name: /行为链路测试用户/ }).click();
+  await page.getByRole("link", { name: "个人中心", exact: true }).click();
+  await expect(page).toHaveURL(/\/profile$/);
+  const behaviorHistory = page.locator(".profile-dimension-card").filter({ hasText: "学习历史" });
+  await expect(behaviorHistory).toBeVisible();
+  await expect(behaviorHistory).not.toContainText("待对话识别", { timeout: 30_000 });
+  await expect(behaviorHistory).toContainText(/拍照搜题|photo_search/);
+});
 test("后端薄弱点驱动计划与异步资源", async ({ page }) => {
   const owner = `plan_resource_e2e_${Date.now()}`;
   await page.goto(`${baseUrl}/login?next=/`, { waitUntil: "domcontentloaded" });

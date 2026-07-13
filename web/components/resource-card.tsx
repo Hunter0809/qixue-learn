@@ -33,8 +33,6 @@ export function resourceTypeLabel(type: Resource["type"]) {
   if (type === "diagram") return "思维导图";
   if (type === "analogy") return "类比解释";
   if (type === "reading") return "拓展阅读";
-  if (type === "video") return "视频脚本";
-  if (type === "animation") return "动画分镜";
   return "代码实操";
 }
 

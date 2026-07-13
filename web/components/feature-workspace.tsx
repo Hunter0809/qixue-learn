@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { postJson } from "@/lib/fetcher";
 import { emitServiceWarning } from "@/lib/client-warning";
-import type { HomeworkFeature, HomeworkJobAccepted, HomeworkRequest, HomeworkResponse } from "@/lib/types";
+import type { HomeworkFeature, HomeworkRequest, HomeworkResponse } from "@/lib/types";
 import { getFeatureConfig } from "@/lib/feature-config";
 import { getLearnerProfile, loadCurrentUsername, saveLearningHistory } from "@/lib/profile-storage";
 import { useLearningStore, addWeakPoint, getWeakPoints, type WeakPoint } from "@/lib/store";
@@ -388,23 +388,6 @@ function FeatureResultBody({ data, feature, onFollowUp }: { data: HomeworkRespon
   );
 }
 
-function TutorArtifactCards({ artifacts }: { artifacts?: HomeworkResponse["artifacts"] }) {
-  if (!artifacts) return null;
-  const cards = [
-    { title: "图解说明", content: artifacts.diagram },
-    { title: "短视频讲解脚本", content: artifacts.videoScript },
-    { title: "动画分镜与交互", content: artifacts.animationStoryboard }
-  ];
-  return (
-    <div className="result-sections tutor-artifact-grid">
-      {cards.map((card) => (
-        <ResultCard title={card.title} filled key={card.title}>
-          <MarkdownRenderer text={card.content} boldAsSubheading />
-        </ResultCard>
-      ))}
-    </div>
-  );
-}
 function ResultPanel({
   data,
   mode,
@@ -434,7 +417,6 @@ function ResultPanel({
       </div>
       <div className={`answer-content output-layout output-layout-${feature}`}>
         <FeatureResultBody data={data} feature={feature} onFollowUp={onFollowUp} />
-        <TutorArtifactCards artifacts={data.artifacts} />
       </div>
     </div>
   );
@@ -614,7 +596,7 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
 
   const { trigger, data, error, isMutating } = useSWRMutation(
     `/api/homework/${config.feature}`,
-    (_url: string, { arg }: { arg: HomeworkRequest }) => postJson<HomeworkResponse | HomeworkJobAccepted, HomeworkRequest>("/api/homework", arg)
+    (_url: string, { arg }: { arg: HomeworkRequest }) => postJson<HomeworkResponse, HomeworkRequest>("/api/homework", arg)
   );
 
   useEffect(() => setHydrated(true), []);
@@ -692,21 +674,6 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
     }
   }
 
-  async function waitForHomeworkJob(request: HomeworkRequest, jobId: string, workspaceFeature: HomeworkFeature) {
-    for (let attempt = 0; attempt < 300; attempt += 1) {
-      if (attempt > 0) await new Promise((resolve) => window.setTimeout(resolve, 1000));
-      const response = await fetch(`/api/homework/status?jobId=${encodeURIComponent(jobId)}&owner=${encodeURIComponent(request.owner || "__anonymous__")}`);
-      const payload = await response.json() as { status?: string; result?: HomeworkResponse; error?: string };
-      if (!response.ok) throw new Error(payload.error || "后台生成失败");
-      if (payload.status === "completed" && payload.result) {
-        recordHomeworkOutcome(request, payload.result, workspaceFeature);
-        return;
-      }
-      if (payload.status === "failed") throw new Error(payload.error || "后台生成失败");
-    }
-    throw new Error("后台生成超过 5 分钟仍未完成，请查看任务状态");
-  }
-
   function runHomeworkRequest(request: HomeworkRequest, workspaceFeature: HomeworkFeature = feature) {
     const startedAt = Date.now();
     if (workspaceFeature === feature) setPendingRequest(request);
@@ -722,10 +689,6 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
     });
     void trigger(request).then(async (response) => {
       if (!response) return;
-      if ("jobId" in response) {
-        await waitForHomeworkJob(request, response.jobId, workspaceFeature);
-        return;
-      }
       recordHomeworkOutcome(request, response, workspaceFeature);
     }).catch((requestError) => {
       const message = requestError instanceof Error ? requestError.message : "生成失败";
@@ -792,12 +755,12 @@ export function FeatureWorkspace({ feature }: { feature: HomeworkFeature }) {
       "course_recommend", "recitation"
     ]);
     const correctionFeatures = new Set([
-      "homework_review", "essay_correction", "mental_math_check",
+      "photo_search", "homework_review", "essay_correction", "mental_math_check",
       "mistake_analysis"
     ]);
     if (positiveFeatures.has(feature)) return true;
     if (correctionFeatures.has(feature)) return false;
-    // ai_answer, photo_search, photo_translate, word_lookup, oral_practice,
+    // ai_answer, photo_translate, word_lookup, oral_practice,
     // document_scan, parent_report → 中性学习行为，默认正确
     return true;
   }

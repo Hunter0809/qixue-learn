@@ -301,7 +301,7 @@ function applyRemoteArchive(owner: string, archive: {
   }
 }
 
-async function syncUserArchiveFromBackend(owner: string) {
+export async function syncUserArchiveFromBackend(owner: string) {
   if (!available()) return;
   try {
     const resp = await fetch(`/api/profile/archive?owner=${encodeURIComponent(owner)}`);
@@ -506,6 +506,43 @@ export function updateCurrentUserProfile(patch: Partial<Pick<StoredUser, "nickna
   return users[username];
 }
 
+export function recordLearningBehaviorInProfile(input: {
+  subject: string;
+  knowledge: string;
+  source: string;
+  correct: boolean;
+}) {
+  const sourceLabels: Record<string, string> = {
+    photo_search: "拍照搜题",
+    ai_answer: "智能答疑",
+    homework_review: "作业批改",
+    essay_correction: "作文批改",
+    oral_practice: "口语练习",
+    word_lookup: "词典查询",
+    photo_translate: "拍照翻译",
+    mental_math_check: "口算检查",
+    document_scan: "文档整理",
+    recitation: "背诵复习",
+    course_recommend: "课程推荐",
+    parent_report: "学习报告",
+    practice: "练习作答",
+    video_click: "学习视频",
+    resource_click: "资源学习",
+    review_plan_view: "复习计划",
+    quiz_submit: "测验提交",
+    mistake_analysis: "错题分析"
+  };
+  const user = loadCurrentUserProfile();
+  if (!user || isGuestSession()) return null;
+  const label = sourceLabels[input.source] || input.source;
+  const state = input.correct ? "已学习" : "待巩固";
+  const entry = `${new Date().toLocaleDateString("zh-CN")}：${label}·${input.subject}·${input.knowledge}（${state}）`;
+  const historySummary = [
+    entry,
+    ...(user.historySummary || "").split(/\n+/).filter(Boolean).filter((item) => item !== entry)
+  ].slice(0, 12).join("\n");
+  return updateCurrentUserProfile({ historySummary });
+}
 export function logoutUser() {
   if (!available()) return;
   localStorage.removeItem(CURRENT_USER_KEY);

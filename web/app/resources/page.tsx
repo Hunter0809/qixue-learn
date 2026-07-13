@@ -173,11 +173,9 @@ function ResourcesContent() {
           <select id="type" className="select" value={filter.type} onChange={(event) => setFilter({ ...filter, type: event.target.value as ResourceRequest["type"] })}>
             <option value="lecture">讲义</option>
             <option value="exercise">练习题</option>
-            <option value="diagram">图解</option>
+            <option value="diagram">思维导图</option>
             <option value="analogy">类比解释</option>
             <option value="reading">拓展阅读</option>
-            <option value="video">视频脚本</option>
-            <option value="animation">动画分镜</option>
             <option value="code">代码实操</option>
           </select>
         </div>

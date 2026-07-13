@@ -24,14 +24,12 @@ const difficultyMap: Record<string, "easy" | "medium" | "hard"> = {
   "中等": "medium", "同步": "medium", "medium": "medium",
   "提高": "hard", "困难": "hard", "hard": "hard"
 };
-const typeMap: Record<string, "lecture" | "exercise" | "diagram" | "analogy" | "reading" | "video" | "animation" | "code"> = {
+const typeMap: Record<string, "lecture" | "exercise" | "diagram" | "analogy" | "reading" | "code"> = {
   "讲义": "lecture", "核心概念": "lecture", "lecture": "lecture",
   "练习题": "exercise", "练习": "exercise", "例题": "exercise", "exercise": "exercise",
   "图解": "diagram", "思维导图": "diagram", "diagram": "diagram",
   "类比解释": "analogy", "类比": "analogy", "analogy": "analogy",
   "拓展阅读": "reading", "阅读": "reading", "reading": "reading",
-  "视频": "video", "视频脚本": "video", "video": "video",
-  "动画": "animation", "动画分镜": "animation", "animation": "animation",
   "代码实操": "code", "实操案例": "code", "code": "code"
 };
 
@@ -132,7 +130,7 @@ export const quizSubmitSchema = z.object({
 export const resourceRequestSchema = z.object({
   owner: z.string().optional(),
   knowledge: z.string().min(1),
-  type: z.enum(["lecture", "exercise", "diagram", "analogy", "reading", "video", "animation", "code"]),
+  type: z.enum(["lecture", "exercise", "diagram", "analogy", "reading", "code"]),
   style: z.enum(["plain", "exam", "practice"]),
   profile: learnerProfileSchema.optional()
 });
@@ -140,7 +138,7 @@ export const resourceRequestSchema = z.object({
 export const resourceAgentTraceSchema = z.object({
   agentId: z.string(),
   role: z.string(),
-  artifactType: z.enum(["lecture", "exercise", "diagram", "analogy", "reading", "video", "animation", "code"]),
+  artifactType: z.enum(["lecture", "exercise", "diagram", "analogy", "reading", "code"]),
   status: z.enum(["completed", "cache_hit"]),
   latencyMs: z.number().nonnegative().optional()
 });
@@ -215,11 +213,6 @@ export const homeworkRequestSchema = z.object({
   profile: learnerProfileSchema.optional()
 });
 
-export const tutorArtifactsSchema = z.object({
-  diagram: z.string().min(1),
-  videoScript: z.string().min(1),
-  animationStoryboard: z.string().min(1)
-});
 export const homeworkResponseSchema = z.object({
   feature: homeworkRequestSchema.shape.feature,
   title: z.string(),
@@ -228,7 +221,6 @@ export const homeworkResponseSchema = z.object({
     title: z.string(),
     items: z.array(z.string())
   })).optional(),
-  artifacts: tutorArtifactsSchema.optional(),
   steps: z.preprocess((value) => {
     if (typeof value === "string") {
       return value.split(/\r?\n|[；;]/).map((item) => item.trim()).filter(Boolean);
@@ -248,5 +240,3 @@ export const homeworkResponseSchema = z.object({
     return JSON.stringify(value);
   })
 });
-
-export const homeworkTutorResponseSchema = homeworkResponseSchema.extend({ artifacts: tutorArtifactsSchema });

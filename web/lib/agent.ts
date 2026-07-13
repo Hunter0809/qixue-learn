@@ -43,8 +43,50 @@ export function extractJsonFromText(text: string): string {
   return trimmed;
 }
 
+const latexCommands = new Set([
+  "frac", "dfrac", "tfrac", "sqrt", "sin", "cos", "tan", "cot", "sec", "csc",
+  "arcsin", "arccos", "arctan", "sinh", "cosh", "tanh", "ln", "log", "exp", "lim",
+  "sum", "prod", "int", "iint", "iiint", "oint", "partial", "nabla", "infty",
+  "alpha", "beta", "gamma", "delta", "epsilon", "theta", "lambda", "mu", "nu", "pi",
+  "rho", "sigma", "tau", "phi", "chi", "psi", "omega", "Delta", "Gamma", "Theta",
+  "Lambda", "Pi", "Sigma", "Phi", "Psi", "Omega", "cdot", "times", "div", "pm", "mp",
+  "le", "leq", "ge", "geq", "ne", "neq", "approx", "equiv", "propto", "in", "notin",
+  "subset", "supset", "subseteq", "supseteq", "cup", "cap", "to", "rightarrow",
+  "leftarrow", "leftrightarrow", "Rightarrow", "Leftarrow", "Leftrightarrow", "implies",
+  "iff", "forall", "exists", "neg", "land", "lor", "text", "mathrm", "mathbf", "mathit",
+  "mathbb", "mathcal", "operatorname", "left", "right", "begin", "end", "overline",
+  "underline", "hat", "bar", "vec", "dot", "ddot"
+]);
+
+function isAsciiLetter(value: string) {
+  const code = value.charCodeAt(0);
+  return (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+}
+
+function normalizeLatexJsonEscapes(value: string) {
+  const slash = String.fromCharCode(92);
+  let normalized = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (char !== slash) {
+      normalized += char;
+      continue;
+    }
+    if (value[index + 1] === slash) {
+      normalized += slash + slash;
+      index += 1;
+      continue;
+    }
+    let end = index + 1;
+    while (end < value.length && isAsciiLetter(value[end])) end += 1;
+    const command = value.slice(index + 1, end);
+    normalized += latexCommands.has(command) ? slash + slash : slash;
+  }
+  return normalized;
+}
+
 export function parseAgentJson(text: string): unknown {
-  const extracted = extractJsonFromText(text);
+  const extracted = normalizeLatexJsonEscapes(extractJsonFromText(text));
   try {
     return JSON.parse(extracted);
   } catch (firstError) {
@@ -56,6 +98,11 @@ export function parseAgentJson(text: string): unknown {
         continue;
       }
       const next = extracted[index + 1] || "";
+      if (next === "\\") {
+        repaired += "\\\\";
+        index += 1;
+        continue;
+      }
       const validSimpleEscape = ["\\", "\"", "/", "b", "f", "n", "r", "t"].includes(next);
       const validUnicodeEscape = next === "u" && /^[0-9a-fA-F]{4}$/.test(extracted.slice(index + 2, index + 6));
       if (validSimpleEscape || validUnicodeEscape) {
@@ -81,7 +128,15 @@ async function requestAgentJson(messages: AgentMessage[], signal?: AbortSignal):
     const response = await fetch(baseUrl + "/chat/completions", {
       method: "POST",
       headers: { authorization: "Bearer " + token, "content-type": "application/json" },
-      body: JSON.stringify({ model, messages, temperature: 0.15, max_tokens: Number.isFinite(maxTokens) && maxTokens > 0 ? maxTokens : 6144, stream: false }),
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: 0.15,
+        top_p: 0.95,
+        max_tokens: Number.isFinite(maxTokens) && maxTokens > 0 ? maxTokens : 6144,
+        chat_template_kwargs: { enable_thinking: process.env.AGENT_VISION_ENABLE_THINKING === "1" },
+        stream: false
+      }),
       signal: requestSignal.signal
     });
     if (!response.ok) {

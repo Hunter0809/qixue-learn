@@ -16,7 +16,7 @@ export type WeakPoint = {
   severity: number;
 };
 
-export type ResourceType = "lecture" | "exercise" | "diagram" | "analogy" | "reading" | "video" | "animation" | "code";
+export type ResourceType = "lecture" | "exercise" | "diagram" | "analogy" | "reading" | "code";
 
 export type Resource = {
   id: string;
@@ -185,24 +185,12 @@ export type HomeworkRequest = {
   forceAI?: boolean;
 };
 
-export type TutorArtifacts = {
-  diagram: string;
-  videoScript: string;
-  animationStoryboard: string;
-};
-export type HomeworkJobAccepted = {
-  jobId: string;
-  status: "processing";
-  feature: HomeworkFeature;
-  title: string;
-};
 
 export type HomeworkResponse = {
   feature: HomeworkFeature;
   title: string;
   answer: string;
   sections?: { title: string; items: string[] }[];
-  artifacts?: TutorArtifacts;
   steps: string[];
   knowledge: string[];
   similarPractice: QuizQuestion[];

@@ -1,13 +1,81 @@
 import { canonicalizeKnowledge, classifyKnowledgeFromText, normalizeSubject } from "@/lib/knowledge-catalog";
 import {
   getStoredLearningBehaviorWeight,
+  getStoredResources,
+  getStoredUserProfile,
   saveStoredLearningBehavior,
   saveStoredLearningRecord,
+  saveStoredResources,
+  saveStoredUserProfile,
   saveStoredWeakPoint
 } from "@/lib/server-db";
 import type { HomeworkRequest, HomeworkResponse, LearnerProfile } from "@/lib/types";
+import { generateResourceBundle, resourceAgentSpecs } from "@/lib/multi-agent-orchestrator";
 
 export const WEAK_POINT_THRESHOLD = 25;
+const pendingBehaviorResources = new Set<string>();
+
+function profileText(profile?: LearnerProfile) {
+  if (!profile) return "";
+  return [
+    profile.major && `专业：${profile.major}`,
+    profile.region && `地区：${profile.region}`,
+    profile.grade && `年级：${profile.grade}`,
+    profile.learningGoal && `目标：${profile.learningGoal}`,
+    profile.knowledgeBase && `基础：${profile.knowledgeBase}`,
+    profile.cognitiveStyle && `认知风格：${profile.cognitiveStyle}`,
+    profile.errorPreference && `易错偏好：${profile.errorPreference}`,
+    profile.learningPreference && `学习偏好：${profile.learningPreference}`,
+    profile.historySummary && `学习历史：${profile.historySummary}`,
+    profile.targetExam && `考试目标：${profile.targetExam}`
+  ].filter(Boolean).join("；");
+}
+
+function updateHistorySummary(existing: string | undefined, subject: string, knowledge: string, source: string) {
+  const entry = `${new Date().toLocaleDateString("zh-CN")}：${source}关注${subject}·${knowledge}`;
+  return [entry, ...(existing || "").split(/\n+/).filter(Boolean).filter((item) => item !== entry)].slice(0, 12).join("\n");
+}
+
+async function updateBehaviorProfile(owner: string, inputProfile: LearnerProfile | undefined, subject: string, knowledge: string, source: string) {
+  const stored = await getStoredUserProfile(owner);
+  const profile = {
+    ...(stored || {}),
+    ...(inputProfile || {}),
+    owner,
+    historySummary: updateHistorySummary(stored?.historySummary || inputProfile?.historySummary, subject, knowledge, source),
+    updatedAt: Date.now()
+  } as Parameters<typeof saveStoredUserProfile>[0];
+  await saveStoredUserProfile(profile);
+  return profile;
+}
+
+export async function refreshBehaviorResources(input: {
+  owner: string;
+  subject: string;
+  knowledge: string;
+  profile?: LearnerProfile;
+}) {
+  const key = `${input.owner}|${input.subject}|${input.knowledge}`;
+  if (pendingBehaviorResources.has(key)) return;
+  pendingBehaviorResources.add(key);
+  try {
+    const stored = await getStoredResources(input.knowledge, input.profile, input.owner);
+    const types = new Set(stored.map((resource) => resource.type));
+    const specs = resourceAgentSpecs();
+    if (specs.every((spec) => types.has(spec.type))) return;
+    const generated = await generateResourceBundle({
+      knowledge: input.knowledge,
+      subject: input.subject,
+      profile: input.profile,
+      profileText: profileText(input.profile),
+      request: { owner: input.owner, source: "learning_behavior" },
+      signal: AbortSignal.timeout(60000)
+    });
+    await saveStoredResources(generated.resources, input.profile, input.owner);
+  } finally {
+    pendingBehaviorResources.delete(key);
+  }
+}
 
 const BEHAVIOR_WEIGHTS: Record<string, number> = {
   video_click: 4,
@@ -60,8 +128,11 @@ export async function persistLearningBehavior(input: {
   correct?: boolean;
 }) {
   const owner = input.owner?.trim().toLowerCase() || "__anonymous__";
-  const parsed = splitSubjectKnowledge(input.subject, input.knowledge, input.profile);
+  const storedProfile = await getStoredUserProfile(owner);
+  const effectiveProfile = input.profile || storedProfile || undefined;
+  const parsed = splitSubjectKnowledge(input.subject, input.knowledge, effectiveProfile);
   if (!parsed.knowledge) return null;
+  const profile = await updateBehaviorProfile(owner, effectiveProfile, parsed.subject, parsed.knowledge, input.source);
   await saveStoredLearningBehavior({
     owner,
     subject: parsed.subject,
@@ -71,11 +142,15 @@ export async function persistLearningBehavior(input: {
     correct: input.correct
   });
   const weight = await getStoredLearningBehaviorWeight({ owner, subject: parsed.subject, knowledge: parsed.knowledge });
-  if (weight < WEAK_POINT_THRESHOLD) return { ...parsed, weight, promoted: false, needsRefresh: false };
-  await saveStoredWeakPoint({ owner, subject: parsed.subject, knowledge: parsed.knowledge, weight, source: input.source });
-  return { ...parsed, weight, promoted: true, needsRefresh: true };
+  await saveStoredWeakPoint({
+    owner,
+    subject: parsed.subject,
+    knowledge: parsed.knowledge,
+    weight: Math.max(1, Math.min(100, weight)),
+    source: input.source
+  });
+  return { ...parsed, weight, promoted: weight >= WEAK_POINT_THRESHOLD, needsRefresh: true, profile };
 }
-
 export async function persistHomeworkOutcome(request: HomeworkRequest, response: HomeworkResponse) {
   const owner = request.owner?.trim().toLowerCase() || "__anonymous__";
   await saveStoredLearningRecord({ owner, request, response });

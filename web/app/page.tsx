@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Flame, LayoutGrid, List, Loader2, Plus, Star, Target, X } from "lucide-react";
 import type { PlanResponse, ProfileResponse, TodayTask } from "@/lib/types";
 import { useLearningStore, getWeakPoints, getWeakPointProgress, decayWeakPoints, deleteWeakPoint, type WeakPoint } from "@/lib/store";
-import { preGenerateResources, getCachedResources, deleteResource } from "@/lib/resource-cache";
+import { setCachedResources, deleteResource } from "@/lib/resource-cache";
 import { getCachedReviewPlan, isGeneratingReviewPlan, preGenerateReviewPlans } from "@/lib/review-plan-cache";
 import { ProgressRing } from "@/components/progress-ring";
 import { TaskCard } from "@/components/task-card";
@@ -544,26 +544,49 @@ export default function HomePage() {
   const [activityStats, setActivityStats] = useState({ totalMinutes: 0, sessionsCount: 0 });
 
   useEffect(() => {
+    let cancelled = false;
     refresh();
     startTracking();
     setActivityStats(getActivityStats());
-    function preGenerateWeakPointResources() {
-      if (!loadCurrentUserProfile() || isGuestSession()) return;
-      getWeakPoints().forEach(function(wp) {
-        if (!getCachedResources(`${wp.subject} ${wp.knowledge}`)) {
-          preGenerateResources(wp.knowledge, wp.subject);
-        }
-      });
+
+    async function syncRemoteResources() {
+      const owner = loadCurrentUsername();
+      if (!owner || isGuestSession() || !getWeakPoints().length) return 0;
+      try {
+        const response = await fetch(`/api/profile?owner=${encodeURIComponent(owner)}`, { cache: "no-store" });
+        if (!response.ok) return 0;
+        const remote = await response.json() as ProfileResponse;
+        const groups = new Map<string, typeof remote.recommended_resources>();
+        remote.recommended_resources.forEach((resource) => {
+          const key = resource.knowledge || resource.title;
+          groups.set(key, [...(groups.get(key) || []), resource]);
+        });
+        groups.forEach((resources, knowledge) => setCachedResources(knowledge, resources));
+        if (!cancelled && remote.recommended_resources.length) refresh();
+        return remote.recommended_resources.length;
+      } catch {
+        return 0;
+      }
     }
+
+    async function pollRemoteResources() {
+      if (!getWeakPoints().length) return;
+      for (let attempt = 0; attempt < 45 && !cancelled; attempt += 1) {
+        if (await syncRemoteResources()) return;
+        await new Promise((resolve) => window.setTimeout(resolve, 2000));
+      }
+    }
+
     function preGenerateWeakPointPlans() {
       if (!loadCurrentUserProfile() || isGuestSession()) return;
       preGenerateReviewPlans(getWeakPoints());
     }
-    preGenerateWeakPointResources();
+
+    void pollRemoteResources();
     preGenerateWeakPointPlans();
     function handleWeakPointUpdated() {
       refresh();
-      preGenerateWeakPointResources();
+      void pollRemoteResources();
       preGenerateWeakPointPlans();
     }
     function handleResourcesReady() {
@@ -577,6 +600,7 @@ export default function HomePage() {
     window.addEventListener("qixue:review-plan-ready", handleReviewPlanReady);
     const id = setInterval(() => setActivityStats(getActivityStats()), 10000);
     return () => {
+      cancelled = true;
       clearInterval(id);
       window.removeEventListener("qixue:weak-point-updated", handleWeakPointUpdated);
       window.removeEventListener("qixue:resources-ready", handleResourcesReady);

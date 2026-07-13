@@ -1,8 +1,9 @@
+import { after } from "next/server";
 import { askDeepSeekStreamCollect } from "@/lib/agent-deepseek";
 import { routeJson } from "@/lib/api-route";
 import { getStoredUserProfile } from "@/lib/server-db";
 import { quizSubmitRequestSchema, quizSubmitSchema } from "@/lib/schemas";
-import { persistLearningBehavior } from "@/lib/learning-persistence";
+import { persistLearningBehavior, refreshBehaviorResources } from "@/lib/learning-persistence";
 import { logModuleRequest } from "@/lib/server-logger";
 
 export async function POST(request: Request) {
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
       context,
       "quiz_submit"
     );
-    await Promise.all(result.feedback.map((item) => {
+    const behaviorResults = await Promise.all(result.feedback.map((item) => {
       const question = questionMap.get(item.questionId);
       const knowledge = item.weakPoint || question?.knowledge || "诊断测试综合能力";
       return persistLearningBehavior({
@@ -38,6 +39,12 @@ export async function POST(request: Request) {
         correct: item.score >= 60
       });
     }));
+    after(() => Promise.all(behaviorResults.filter(Boolean).map((behavior) => refreshBehaviorResources({
+      owner,
+      subject: behavior!.subject,
+      knowledge: behavior!.knowledge,
+      profile: behavior!.profile
+    }))).then(() => undefined).catch(() => undefined));
     return result;
   });
 }

@@ -1,6 +1,8 @@
+import { after } from "next/server";
 import { routeJson } from "@/lib/api-route";
-import { persistLearningBehavior } from "@/lib/learning-persistence";
+import { persistLearningBehavior, refreshBehaviorResources } from "@/lib/learning-persistence";
 import type { LearnerProfile } from "@/lib/types";
+import { learnerProfileSchema } from "@/lib/schemas";
 import { z } from "zod";
 
 const requestSchema = z.object({
@@ -9,19 +11,21 @@ const requestSchema = z.object({
   knowledge: z.string().min(1),
   source: z.string().min(1),
   correct: z.boolean().optional(),
-  profile: z.object({
-    nickname: z.string().optional(),
-    school: z.string().optional(),
-    grade: z.string().optional(),
-    region: z.string().optional(),
-    difficulty: z.string().optional()
-  }).optional()
+  profile: learnerProfileSchema.optional()
 });
 
 export async function POST(request: Request) {
   return routeJson(async () => {
     const body = requestSchema.parse(await request.json());
     const result = await persistLearningBehavior({ ...body, profile: body.profile as LearnerProfile | undefined });
+    if (result) {
+      after(() => refreshBehaviorResources({
+        owner: body.owner?.trim().toLowerCase() || "__anonymous__",
+        subject: result.subject,
+        knowledge: result.knowledge,
+        profile: result.profile
+      }).catch(() => undefined));
+    }
     return { ok: true, result };
   });
 }
