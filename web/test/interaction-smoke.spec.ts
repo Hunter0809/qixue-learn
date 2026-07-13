@@ -192,6 +192,7 @@ test("语音转文字驱动智能答疑", async ({ page }) => {
   await page.getByRole("textbox", { name: "昵称" }).fill("语音测试用户");
   await page.getByRole("button", { name: "完成注册" }).click();
   await page.goto(`${baseUrl}/ai-answer`, { waitUntil: "domcontentloaded" });
+  await expect(page.locator("[data-feature-hydrated]")).toHaveAttribute("data-feature-hydrated", "true", { timeout: 30_000 });
   await page.getByRole("button", { name: "语音录入" }).click();
   const input = page.locator("textarea").first();
   await expect(input).toHaveValue("函数顶点的语音问题", { timeout: 10_000 });
