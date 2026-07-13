@@ -40,6 +40,7 @@ export function LoginModal({
 }) {
   const initialRegion = REGION_OPTIONS[0];
   const initialGrade = GRADE_OPTIONS[8];
+  const EMPTY_SCHOOL = "未填写学校";
   const initialProvince = provinceFromRegion(initialRegion);
   const initialCity = initialRegion.split(" ").slice(1).join(" ");
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -50,7 +51,7 @@ export function LoginModal({
   const [selectedProvince, setSelectedProvince] = useState(initialProvince);
   const [selectedCity, setSelectedCity] = useState(initialCity);
   const [grade, setGrade] = useState(initialGrade);
-  const [school, setSchool] = useState(schoolsForRegionAndGrade(initialRegion, initialGrade)[0]);
+  const [school, setSchool] = useState(schoolsForRegionAndGrade(initialRegion, initialGrade)[0] || EMPTY_SCHOOL);
   const [difficulty, setDifficulty] = useState<DifficultyPreference>("同步");
   const [error, setError] = useState("");
   const [schoolImport, setSchoolImport] = useState("");
@@ -64,7 +65,7 @@ export function LoginModal({
     const custom = schoolsForRegionAndGrade(region, grade);
     const schools = Array.from(new Set([...official, ...custom]));
     setSchoolOptions(schools);
-    if (!schools.includes(school)) setSchool(schools[0] || "");
+    if (!schools.includes(school)) setSchool(schools[0] || EMPTY_SCHOOL);
   }, [officialCatalog, region, grade, school]);
 
   useEffect(() => {
@@ -116,14 +117,14 @@ export function LoginModal({
       }
       return;
     }
-    if (!nickname.trim() || !school.trim() || !region.trim()) {
-      setError("请补全昵称、地区、年级和学校");
+    if (!nickname.trim() || !region.trim() || !grade.trim()) {
+      setError("请补全昵称、地区和年级");
       return;
     }
     onDone(registerUser(key, {
       nickname: nickname.trim(),
       avatarUrl,
-      school,
+      school: school.trim() || EMPTY_SCHOOL,
       grade,
       region,
       difficulty
@@ -199,7 +200,7 @@ export function LoginModal({
               <div className="field">
                 <label htmlFor="school">学校（{stageForGrade(grade)}）</label>
                 <select className="select" id="school" value={school} onChange={(event) => setSchool(event.target.value)}>
-                  {schoolOptions.map((item) => <option key={item}>{item}</option>)}
+                  {schoolOptions.length ? schoolOptions.map((item) => <option key={item}>{item}</option>) : <option value={EMPTY_SCHOOL}>未匹配到学校，可在个人中心补充</option>}
                 </select>
               </div>
               <div className="field">
