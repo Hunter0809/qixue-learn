@@ -26,6 +26,12 @@ export default function ReviewPlanPage() {
   const [loading, setLoading] = useState(true);
   const owner = loadCurrentUsername() || "__anonymous__";
 
+  async function loadPersistedPlans() {
+    const response = await fetch(`/api/report?range=week&owner=${encodeURIComponent(owner)}`);
+    if (!response.ok) throw new Error(`复习计划读取失败（${response.status}）`);
+    const report = await response.json() as { plans?: PlanEntry[] };
+    return report.plans || [];
+  }
   useEffect(() => {
     let cancelled = false;
     async function refresh() {
@@ -35,11 +41,11 @@ export default function ReviewPlanPage() {
         const points = await response.json() as WeakPointLike[];
         if (cancelled) return;
         setWeakPoints(points);
-        setPlans(loadPlans(points));
-        if (points.length) {
-          await preGenerateReviewPlans(points);
-          if (!cancelled) setPlans(loadPlans(points));
-        }
+        const cachedPlans = loadPlans(points);
+        setPlans(cachedPlans);
+        if (points.length) await preGenerateReviewPlans(points);
+        const persistedPlans = await loadPersistedPlans();
+        if (!cancelled) setPlans(persistedPlans.length ? persistedPlans : loadPlans(points));
       } catch (error) {
         if (!cancelled) emitServiceWarning(error instanceof Error ? error.message : "请求链路异常：薄弱点服务无法连接。");
       } finally {

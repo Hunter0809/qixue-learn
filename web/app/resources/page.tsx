@@ -41,7 +41,7 @@ function ResourcesContent() {
   const [feedResources, setFeedResources] = useState<Resource[]>([]);
   const [agentTraces, setAgentTraces] = useState<ResourceResponse["agents"]>([]);
   const [loginOpen, setLoginOpen] = useState(false);
-  const [canUsePersonalizedResources, setCanUsePersonalizedResources] = useState(false);
+  const [canUsePersonalizedResources, setCanUsePersonalizedResources] = useState(() => Boolean(loadCurrentUserProfile()) && !isGuestSession());
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const { trigger, data, error, isMutating } = useSWRMutation(
     "/api/resource",

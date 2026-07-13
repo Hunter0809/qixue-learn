@@ -117,6 +117,7 @@ test.describe("启学智伴全模块真实交互", () => {
     await open("/resources");
     const knowledge = `${weakPoint!.subject} ${weakPoint!.knowledge}`;
     await page.getByLabel("知识点").fill(knowledge);
+    await expect(page.getByRole("button", { name: "生成资源" })).toBeEnabled({ timeout: 30_000 });
     await page.getByRole("button", { name: "生成资源" }).click();
     await expect(page.locator(".resource-card-link, .service-warning-modal")).toBeVisible({ timeout: 120_000 });
     if (await page.locator(".service-warning-modal").count()) throw new Error(`个性资源警告：${await page.locator(".service-warning-modal").innerText()}`);
@@ -135,6 +136,32 @@ test.describe("启学智伴全模块真实交互", () => {
   });
 });
 
+test("后端薄弱点驱动计划与异步资源", async ({ page }) => {
+  const owner = `plan_resource_e2e_${Date.now()}`;
+  await page.goto(`${baseUrl}/login?next=/`, { waitUntil: "domcontentloaded" });
+  await page.getByLabel("用户名").fill(owner);
+  await page.getByRole("button", { name: "下一步" }).click();
+  await page.getByRole("textbox", { name: "昵称" }).fill("计划资源测试用户");
+  await page.getByRole("button", { name: "完成注册" }).click();
+  const behavior = await page.request.post(`${baseUrl}/api/behavior`, {
+    data: { owner, subject: "数学", knowledge: "微分方程", source: "photo_search", correct: false }
+  });
+  expect(behavior.ok()).toBeTruthy();
+
+  await page.goto(`${baseUrl}/review-plan`, { waitUntil: "domcontentloaded" });
+  await expect(page.locator(".review-plan-detail, .service-warning-modal").first()).toBeVisible({ timeout: 120_000 });
+  await expect(page.locator(".service-warning-modal")).toHaveCount(0);
+  await page.getByRole("button", { name: /标记完成/ }).first().click();
+  await expect(page.getByRole("button", { name: /取消完成/ }).first()).toBeVisible();
+
+  await page.goto(`${baseUrl}/resources`, { waitUntil: "domcontentloaded" });
+  await page.getByLabel("知识点").fill("数学 微分方程");
+  await expect(page.getByRole("button", { name: "生成资源" })).toBeEnabled({ timeout: 30_000 });
+  await page.getByRole("button", { name: "生成资源" }).click();
+  await expect(page.locator(".resource-card-link, .service-warning-modal")).toBeVisible({ timeout: 120_000 });
+  await expect(page.locator(".service-warning-modal")).toHaveCount(0);
+  await expect(page.locator(".resource-card-link").first()).toBeVisible();
+});
 test("语音转文字驱动智能答疑", async ({ page }) => {
   const consoleErrors: string[] = [];
   page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });
