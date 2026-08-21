@@ -1,0 +1,16 @@
+{
+  "name": "qixue-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix web run dev",
+    "build": "npm --prefix web run build",
+    "start": "npm --prefix web run start",
+    "lint": "npm --prefix web run lint",
+    "typecheck": "npm --prefix web run typecheck",
+    "test:web-routes": "npm --prefix web run test:routes",
+    "download:dictionary": "npm --prefix web run download:dictionary",
+    "download:schools": "npm --prefix web run download:schools",
+    "discover:k12-schools": "npm --prefix web run discover:k12-schools"
+  }
+}
